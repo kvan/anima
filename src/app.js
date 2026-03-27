@@ -20,7 +20,8 @@ window.marked.setOptions({ breaks: true, gfm: true });
 
 // ── Sprite data (inlined — eliminates all load/protocol issues) ──────────
 const SPRITE_DATA = {
-  'cat': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAABTElEQVR4nGNgGAWjYBTgApxcIv/x8Qe7fooAJ5fI//stS/+DaBiG8YeCfpgZ+PggwMiAA4AUGzjYgNnPnzwH05IykgwXDhxh+P7tDU596PqR9YIAqfopsf9a1UQGrbZ8uBiMj6yfBZ8hIItBlsIcTw5A1gvzCLGAUvujjq1mQI4EEB8dMGHTCEsqIIvXlyvAHQNjE0qGMHmQepjlIDbMI8TqJ9d+GEBOObgCkQndYhBGTiIWucfBBu0PywOzQQBXEkTXD1IP0gfSD9NLin5y7SclAJmw5TmYJaD8Bgs5x1WTGF7euYvXcnT9IPUgfcTkX2raT0oAMmEzDGaguIoy3PEgDLKAlFIcpB85+ZGjn1z7iQ1AJnyGwDSDQpDUAmyg9RMbgEzoGmGKYJpJBYNJPzEByISeZJABSNMyq1Bw0gFhEBsXGOr6RwHDCAUAGpNqzZQe1mUAAAAASUVORK5CYII=',
+  'frog': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAABf0lEQVR42u2Sv0rDUBjFT+JFe0MrV7lBURApnUTRLXXwDRTs1Mmhg1MnB4kv4JShg3QQBJ9AfQtbcSl0k06FCmLVgtCqoHWQW9I0/4tBMGcK9+Pc3/nODRArVqxYsf6vJLehLMvyVGL203zW67alqMJFwXe8jDE28/5BnguGNnR+fnjjO8Q4C0TFd7yIKrxvhrOMDADoNL58haAK7wNA2AWi4ktO5h09jeXVeZzsXQMADq42AQClXMXzJYWfczXUAiK8HbdgaL78fvmSW/PCZFUpV3EMIOAAQhUo+E5srwKD8iU7eLv9CADgXAXLyNhf3x2CrKR12wDW5oMWaOZnsnMjXAAwLi4dCwjDJ9ahWF5857Mamq0alhY3XJcX4lw13aEin00PvMI/nZpY6HXt/cLbqD5Ar56iuK0N/M1WzfP3D8qXzO2tFX9OE4zg9ngSW0cUndcn1MsKAEDM62VlJEQQ/90Ze+u83NOw/t/gxyKEkHH8lFLfjSaTydRfWfwb0UYfZKOiFOYAAAAASUVORK5CYII=',
+  'cat': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAACXBIWXMAAAsTAAALEwEAmpwYAAABuElEQVRYhe1XsUoDQRDdW4JoAoKgQiy1EcFS/AAbGy0EfyB10N5axDZiq50/EBH8hWAnIjZiIyoqCNGcYrPy1rxlOfY2u4mFcj4YspOZt7NvmNtLEqWUKDKkKDikKDqUUrk2Uh5XPt9lNpDv83thUL4P5rzKI/5m+0jhk0Y/pAE+fqj4QfjcI8/neUu+DV4fdkWrVhVX6bDxY4D8/eVRvV6YqvTFR/2zu050fYi93GqIuZ1NI5r+e/qc8LuSb5Prl08xMzYkZssfol9AOEEhoUA++PYeP91A6SKWKxO6axA/ub5kDsM14y50H5821shncawppNcYM458V/3Qx4C1fU2UWeGwtPNkRuSk0dQbrew19Rqw4xnuWzeu5x754IFPLmCPYFY4zI676vfixzRQ2gIwLgRELh7em84db6yK+mnbKZ5o1aoVTgfykA8eD4P9fIe36yPPVT+EH9NAmScGQuwLDIYCvvF38e3xAz/mLeCqH8oPbaB0kZPkO4dkdNC+wBDPWgw/FIPwQxsos0QmkRyL38QPaqCyfsCAeF6f15fIwdq0tsfbC3OxcJ1X/C/xqTv5/zcoio0v6Sr8VDTnp8YAAAAASUVORK5CYII=',
   'rabbit': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAA9klEQVR4nGNgGAWjYBQgA04ukf8gjItPKiBVP7XtJwSYsAmeW90AthgXn1RAqn5K7Cc1AJmIdRQpltMyxqgdgCz4DCI16YIsggGj0AaKA4EeAcmCLvD92xtGkOOX5DrDxa4dOkyUYUahiAAgRz+l9pMTgEz4JGMm70WhCTkchsnRT6n9yO4ARQQoAGEYXwAy4TMMlKSNeP3ANDlgoPUTE4CM+JIPLBmCDECOWWLAQOqH6dWys2XgOC/I8MPwPTh7YjODCV3g+tYp4FIcOQ+C2MQWSAOtHwRAKQYUaKCkf+7zJpyexwlAlsEcgsweKfpHwShgGDkAAJoz5Ga0OakEAAAAAElFTkSuQmCC',
   'penguin': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAA/ElEQVR4nGNgGAWjYEQDRlwSnFwi/5H537+9wamWFoAa9pNtBieXyH9Vq7j/r9++hGN0w4gxAxmTqpca9pNtBieXCFwDjCbFAZR6gFL7STGDCZ8hjx5fZXg/M5ThYo0WA6ng2OZuBjlZbTAbRpMKKLEfmxkgTFRAclIpBkH4VpsdGNMzBZFiBhMDjYCVbymYFkxfDcb0BCCPyhh4gVMhDIBSIbZCkIlhhAMmXKGHDkBipCZDcgCl9pOqnwmbIU8ubCNKjBoOoLb9pOpnQhfA11ggtiFBiQcotZ9U/Sy4FG/1eQCvvkiphkCWgGIam35SWnPk2k8t/aOAYYQAAGGKGJY9IlqWAAAAAElFTkSuQmCC',
   'crab': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAA60lEQVR4nGNgGAWjYBSMgmEEOLlE/oMwseJMlBpAbUCJ/SD5OWoyOOVBcuhmsOAyIOUWw//v394w4hPH5QgQja4Glzi17ScVMGETTLn1hCgxdABzKHpI4xLHBci1H90t2NhEBcAcLMkIX9KitgcotZ8U/UzYBEGOffT4Kjzfgdj09ACl9lOkn5NL5P9SA4P/MBqZTUwhBFP3+u1LMI3MJtUMUu0nRz8TuuZjvhrg0ALRMIAsRsgRIHWg2JaT1QbTyGxCsUCp/eToZyHkGbAB6gjDCAGQJVabb8BpXGLEAHLsp6b+UTAKGIY/AADH7fC4BIq4LgAAAABJRU5ErkJggg==',
@@ -33,10 +34,31 @@ const SPRITE_DATA = {
 // CSS background-image + RAF. No canvas. No image load events.
 // Sheet 64x16 displayed at 128x32 (2x). backgroundPosition shifts per frame.
 
-const ANIMALS = ['cat', 'rabbit', 'penguin', 'crab', 'rat', 'seal', 'snake'];
+const ANIMALS = ['frog', 'cat', 'rabbit', 'penguin', 'crab', 'rat', 'seal', 'snake'];
+const HUES = [0, 45, 90, 135, 180, 225, 270, 315]; // 8 maximally-spaced hue slots
+const FOLDER_COLORS_KEY = 'pixel-terminal-folder-colors';
+
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function getFolderIdentity(cwd) {
+  const store = JSON.parse(localStorage.getItem(FOLDER_COLORS_KEY) || '{}');
+  if (store[cwd]) return store[cwd];
+  const h = hashStr(cwd);
+  const identity = {
+    animalIndex: h % ANIMALS.length,
+    hueIndex: (h >> 4) % HUES.length,
+  };
+  store[cwd] = identity;
+  localStorage.setItem(FOLDER_COLORS_KEY, JSON.stringify(store));
+  return identity;
+}
 
 class SpriteRenderer {
-  constructor(el, charIndex) {
+  constructor(el, charIndex, hueIndex = 0) {
     this.el = el;
     this._frameIdx = 0;
     this._status = 'idle';
@@ -55,6 +77,7 @@ class SpriteRenderer {
     el.style.backgroundRepeat = 'no-repeat';
     el.style.backgroundPosition = '0 0';
     el.style.imageRendering = 'pixelated';
+    if (hueIndex > 0) el.style.filter = `hue-rotate(${HUES[hueIndex]}deg) saturate(1.4)`;
     // Loop starts only when setStatus transitions to an active state
   }
 
@@ -112,10 +135,6 @@ async function isSelfDirectory(cwd) {
   return results.some(r => r.code === 0);
 }
 
-// ── Session counter (for charIndex sprite rotation) ────────
-
-let sessionCounter = 0;
-
 // ── Session state ──────────────────────────────────────────
 
 /** @type {Map<string, Session>} */
@@ -134,14 +153,13 @@ let activeSessionId = null;
 async function createSession(cwd, opts = {}) {
   const id    = crypto.randomUUID();
   const name  = cwd.split('/').pop() || cwd;
-  const charIndex = sessionCounter % ANIMALS.length;
-  sessionCounter++;
+  const { animalIndex: charIndex, hueIndex } = getFolderIdentity(cwd);
 
   sessionLogs.set(id, { messages: [] });
 
   /** @type {Session} */
   const session = {
-    id, cwd, name, charIndex,
+    id, cwd, name, charIndex, hueIndex,
     status: 'idle',
     child: null,
     toolPending: {},
@@ -616,7 +634,7 @@ function renderSessionCard(id) {
 
   // Attach sprite renderer to the wrap div
   const wrap = document.getElementById(`card-sprite-wrap-${id}`);
-  spriteRenderers.set(id, new SpriteRenderer(wrap, s.charIndex));
+  spriteRenderers.set(id, new SpriteRenderer(wrap, s.charIndex, s.hueIndex));
 }
 
 function updateSessionCard(id) {
