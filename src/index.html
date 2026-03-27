@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pixel Terminal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- marked loaded as UMD global -->
+  <script src="marked.umd.js"></script>
+</head>
+<body>
+  <div id="drag-region" data-tauri-drag-region></div>
+  <div id="confirm-overlay" class="hidden">
+    <div id="confirm-box">
+      <div id="confirm-msg"></div>
+      <div id="confirm-btns">
+        <button id="confirm-cancel">cancel</button>
+        <button id="confirm-ok">terminate</button>
+      </div>
+    </div>
+  </div>
+  <div id="app">
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+      <div id="sidebar-header">
+        <span class="pixel-label">SESSIONS</span>
+        <button id="btn-new-session" title="New Session">＋</button>
+      </div>
+      <div id="session-list">
+        <!-- session cards injected by app.js -->
+      </div>
+    </div>
+
+    <div id="sidebar-resize"></div>
+
+    <!-- MAIN PANE -->
+    <div id="main">
+
+      <!-- Chat view -->
+      <div id="chat-view">
+
+        <div id="message-log"></div>
+
+        <div id="input-bar">
+          <textarea
+            id="msg-input"
+            placeholder="Message Claude Code..."
+            rows="1"
+            autofocus
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+          ></textarea>
+          <button id="btn-send" title="Send (Enter)">▶</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

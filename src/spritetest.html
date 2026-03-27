@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head><style>
+  body { background: #000; padding: 20px; font-family: monospace; color: #ccc; }
+  img { image-rendering: pixelated; width: 64px; height: 32px; margin: 4px; background: #111; }
+  canvas { image-rendering: pixelated; margin: 4px; background: #111; }
+</style></head>
+<body>
+<p>IMG tags (path test):</p>
+<img src="sprites/cat_sheet.png" onerror="this.style.outline='2px solid red'" title="cat">
+<img src="sprites/rabbit_sheet.png" onerror="this.style.outline='2px solid red'" title="rabbit">
+<img src="sprites/penguin_sheet.png" onerror="this.style.outline='2px solid red'" title="penguin">
+
+<p>Canvas animation test:</p>
+<canvas id="c" width="64" height="32"></canvas>
+
+<script>
+const ctx = document.getElementById('c').getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const img = new Image();
+img.onload = () => {
+  document.body.insertAdjacentHTML('beforeend', '<p style="color:lime">Image loaded OK</p>');
+  let f = 0;
+  setInterval(() => {
+    ctx.clearRect(0,0,64,32);
+    ctx.drawImage(img, f*16, 0, 16, 16, 0, 0, 64, 64);
+    f = (f+1)%4;
+  }, 200);
+};
+img.onerror = () => {
+  document.body.insertAdjacentHTML('beforeend', '<p style="color:red">Image FAILED to load: ' + img.src + '</p>');
+};
+img.src = 'sprites/cat_sheet.png';
+</script>
+</body>
+</html>
