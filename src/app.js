@@ -39,9 +39,13 @@ const HUES = [0, 45, 90, 135, 180, 225, 270, 315]; // 8 maximally-spaced hue slo
 const FOLDER_COLORS_KEY = 'pixel-terminal-folder-colors';
 
 function hashStr(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
+  // FNV-1a with MurmurHash3 finalizer — uniform distribution across all 32 bits
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0; // unsigned 32-bit
 }
 
 function getFolderIdentity(cwd) {
@@ -50,7 +54,7 @@ function getFolderIdentity(cwd) {
   const h = hashStr(cwd);
   const identity = {
     animalIndex: h % ANIMALS.length,
-    hueIndex: (h >> 4) % HUES.length,
+    hueIndex: (h >>> 4) % HUES.length,  // >>> not >> — avoids signed right-shift producing negative index
   };
   store[cwd] = identity;
   localStorage.setItem(FOLDER_COLORS_KEY, JSON.stringify(store));
