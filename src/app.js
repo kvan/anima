@@ -20,45 +20,35 @@ window.marked.setOptions({ breaks: true, gfm: true });
 
 // ── Sprite data (inlined — eliminates all load/protocol issues) ──────────
 const SPRITE_DATA = {
-  'frog': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAABf0lEQVR42u2Sv0rDUBjFT+JFe0MrV7lBURApnUTRLXXwDRTs1Mmhg1MnB4kv4JShg3QQBJ9AfQtbcSl0k06FCmLVgtCqoHWQW9I0/4tBMGcK9+Pc3/nODRArVqxYsf6vJLehLMvyVGL203zW67alqMJFwXe8jDE28/5BnguGNnR+fnjjO8Q4C0TFd7yIKrxvhrOMDADoNL58haAK7wNA2AWi4ktO5h09jeXVeZzsXQMADq42AQClXMXzJYWfczXUAiK8HbdgaL78fvmSW/PCZFUpV3EMIOAAQhUo+E5srwKD8iU7eLv9CADgXAXLyNhf3x2CrKR12wDW5oMWaOZnsnMjXAAwLi4dCwjDJ9ahWF5857Mamq0alhY3XJcX4lw13aEin00PvMI/nZpY6HXt/cLbqD5Ar56iuK0N/M1WzfP3D8qXzO2tFX9OE4zg9ngSW0cUndcn1MsKAEDM62VlJEQQ/90Ze+u83NOw/t/gxyKEkHH8lFLfjSaTydRfWfwb0UYfZKOiFOYAAAAASUVORK5CYII=',
+  'frog': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAAw0lEQVR4nGNgGAWDD+hVmf4vulGFgkFiQ8YBlOiH6f3y/9t/QUFBDDYx5lDkfkodQC39uDCt7aeaA8jVj08vPeyn2AHU0P9igQNODJKnpf1UcQCl+u9/aMCL8ZlBqf1UccBQ1j/gDoAlU1zJl9YpiCoOIFc/MeYj20F191PqAEr0IzsaX0GFrI5a7sZpMD6D0A0jxwPUaN1RxV5SHYUeWOhJDp8ZyOpI8CdeQIyZpLiRLEBsMgQBajuAFPNIcecoGAkAAB3BxNr4pQPvAAAAAElFTkSuQmCC',
   'cat': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAACXBIWXMAAAsTAAALEwEAmpwYAAABuElEQVRYhe1XsUoDQRDdW4JoAoKgQiy1EcFS/AAbGy0EfyB10N5axDZiq50/EBH8hWAnIjZiIyoqCNGcYrPy1rxlOfY2u4mFcj4YspOZt7NvmNtLEqWUKDKkKDikKDqUUrk2Uh5XPt9lNpDv83thUL4P5rzKI/5m+0jhk0Y/pAE+fqj4QfjcI8/neUu+DV4fdkWrVhVX6bDxY4D8/eVRvV6YqvTFR/2zu050fYi93GqIuZ1NI5r+e/qc8LuSb5Prl08xMzYkZssfol9AOEEhoUA++PYeP91A6SKWKxO6axA/ub5kDsM14y50H5821shncawppNcYM458V/3Qx4C1fU2UWeGwtPNkRuSk0dQbrew19Rqw4xnuWzeu5x754IFPLmCPYFY4zI676vfixzRQ2gIwLgRELh7em84db6yK+mnbKZ5o1aoVTgfykA8eD4P9fIe36yPPVT+EH9NAmScGQuwLDIYCvvF38e3xAz/mLeCqH8oPbaB0kZPkO4dkdNC+wBDPWgw/FIPwQxsos0QmkRyL38QPaqCyfsCAeF6f15fIwdq0tsfbC3OxcJ1X/C/xqTv5/zcoio0v6Sr8VDTnp8YAAAAASUVORK5CYII=',
   'rabbit': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAA9klEQVR4nGNgGAWjYBQgA04ukf8gjItPKiBVP7XtJwSYsAmeW90AthgXn1RAqn5K7Cc1AJmIdRQpltMyxqgdgCz4DCI16YIsggGj0AaKA4EeAcmCLvD92xtGkOOX5DrDxa4dOkyUYUahiAAgRz+l9pMTgEz4JGMm70WhCTkchsnRT6n9yO4ARQQoAGEYXwAy4TMMlKSNeP3ANDlgoPUTE4CM+JIPLBmCDECOWWLAQOqH6dWys2XgOC/I8MPwPTh7YjODCV3g+tYp4FIcOQ+C2MQWSAOtHwRAKQYUaKCkf+7zJpyexwlAlsEcgsweKfpHwShgGDkAAJoz5Ga0OakEAAAAAElFTkSuQmCC',
   'penguin': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAA/ElEQVR4nGNgGAWjYEQDRlwSnFwi/5H537+9wamWFoAa9pNtBieXyH9Vq7j/r9++hGN0w4gxAxmTqpca9pNtBieXCFwDjCbFAZR6gFL7STGDCZ8hjx5fZXg/M5ThYo0WA6ng2OZuBjlZbTAbRpMKKLEfmxkgTFRAclIpBkH4VpsdGNMzBZFiBhMDjYCVbymYFkxfDcb0BCCPyhh4gVMhDIBSIbZCkIlhhAMmXKGHDkBipCZDcgCl9pOqnwmbIU8ubCNKjBoOoLb9pOpnQhfA11ggtiFBiQcotZ9U/Sy4FG/1eQCvvkiphkCWgGIam35SWnPk2k8t/aOAYYQAAGGKGJY9IlqWAAAAAElFTkSuQmCC',
   'crab': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAA60lEQVR4nGNgGAWjYBSMgmEEOLlE/oMwseJMlBpAbUCJ/SD5OWoyOOVBcuhmsOAyIOUWw//v394w4hPH5QgQja4Glzi17ScVMGETTLn1hCgxdABzKHpI4xLHBci1H90t2NhEBcAcLMkIX9KitgcotZ8U/UzYBEGOffT4Kjzfgdj09ACl9lOkn5NL5P9SA4P/MBqZTUwhBFP3+u1LMI3MJtUMUu0nRz8TuuZjvhrg0ALRMIAsRsgRIHWg2JaT1QbTyGxCsUCp/eToZyHkGbAB6gjDCAGQJVabb8BpXGLEAHLsp6b+UTAKGIY/AADH7fC4BIq4LgAAAABJRU5ErkJggg==',
   'rat': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAABTElEQVR4nGNgGAWjYBSMZMCIS4KTS+Q/jP392xtGXGK0AJTaTYp+FnwGFdrpgun+Q5f/o/Fp7glK7CZFPyMhT2gLCaOIXX33lqjYB+lFtxSZT0wskms3KfqZiDFstrUoCk0MAFkE8uiuK88YQA4BYRCbGM9TajcpepmIMWj1R1YGNx0pMA2KReSkjAxKVSz+gzA5DqHUbmypD1kvLsCI7gEQ3X3nBCO2ZLR4Zi6DUWgDzhh0lDX8v//xeUaQOSAzYPpBjkAG2FIBpXZj039udQNDbPpk4rOQo6wh2BDkWAQZZCKj/r/Kw/E/odBHj32YXhi+vnUKTjMotRuXfpBekBm49DMhc0zY2RmwxQIsBkFsfA4B6QM5AOQYEA0KbVCog/SDML4YpNRuXPpBAGQGIf1wgOwBWAiCaGQ2A5GAVP2U2k1Nt4+CUcAwMgAAymMvotX5iBgAAAAASUVORK5CYII=',
   'seal': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAAxklEQVR4nGNgGAWjYBSMghEMGAkp4OQS+Y/M//7tDUE91DSDUvsJ6WckpLmitwlFrKO4jmQPkGsGpfYTo5+JGINAmpBpcgAlZtBSLxNyaMGSCzIbBPYd3cGwY/MuMI0L4NNPjBm0sp8YvWAA0tA4fdp/ZBpZHFmMXP34zKCH/dj0M2LLM7B8AuL7ZSQzaKnKE5UHh6J+JnRDrt1+yAAyBJtmYsBQ08+ILgDTCAMFsaEMTtYeYDYoH4HY+Erhoa5/FIwChpEFAKM3JDuNyYkcAAAAAElFTkSuQmCC',
-  'snake': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAABHUlEQVR4nGNgGOGAkWEYAk4ukf/I/O/f3jCOmADg5BL5X6iTznDs4zUGK34tMH3y8WGcgcCEyxBkTK5DyDWDUvv7r8wEex5G4wOMlIYgLg+Qawal9sP0wwDJ7ueEhnqVWTUKTZRmKphBTfuJ0c+ETRAWgrCYIAdQYgal9sNi+/72GPLcz0lCCNLCDGrZ/+JgAXkp4DulIUihGdSwHwYI6WciZAChUhQXAIU6yAOTSrlJLkSpYT+x+lmQOdiSCiwEkeVweWag9WMzB1k/Nn1MyJpAhQ4o1kAYPQTNZW3BhRKIxubQgdaPbg42/dj0MWILNRhAdggMgJI0qIGBHpoDrR+bOcj6celjxGYIPkeBACmNksGkn9xyaBQwDGMAAKNsPyaqyIfWAAAAAElFTkSuQmCC'
+  'snake': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAABHUlEQVR4nGNgGOGAkWEYAk4ukf/I/O/f3jCOmADg5BL5X6iTznDs4zUGK34tMH3y8WGcgcCEyxBkTK5DyDWDUvv7r8wEex5G4wOMlIYgLg+Qawal9sP0wwDJ7ueEhnqVWTUKTZRmKphBTfuJ0c+ETRAWgrCYIAdQYgal9sNi+/72GPLcz0lCCNLCDGrZ/+JgAXkp4DulIUihGdSwHwYI6WciZAChUhQXAIU6yAOTSrlJLkSpYT+x+lmQOdiSCiwEkeVweWag9WMzB1k/Nn1MyJpAhQ4o1kAYPQTNZW3BhRKIxubQgdaPbg42/dj0MWILNRhAdggMgJI0qIGBHpoDrR+bOcj6celjxGYIPkeBACmNksGkn9xyaBQwDGMAAKNsPyaqyIfWAAAAAElFTkSuQmCC',
+  'k-whale': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAACXBIWXMAAAsTAAALEwEAmpwYAAACUElEQVRYhcVXvW7jMAymFCfN3SFjC8dTHkHPkMGAmilPmikw4CGvYL3BTYcC3Q4Zrmls60BXdAlX/inyYwIEZUHkR1KSSQlrLXSRMUagVEp1L7wRXQvfGOOdF30J6DEq+hy7ZQK/gw8A3nXBQGUkHFsEZPMSAIouG10O9gVwTfy2ExD0OYdSb7YlzSf73URvtjXoy5/foi+AtiCHJOeW+AAgpCfT3ACClcl+N8Xv4vwGcawLlORMXwA0NsZIwnHfyJN74bvTQjgoP+bwH8A5yzLhWIbRyj4+htbNB/SNMsuyH1ynxc4E13Imu8Rj4wv+E6SdeNZa5MXn3Xp9fal2DACmcaxPaZr8BIA339Fiu4lHt9qtNE2merM9084hTabzageVUuWY+AFNRMulsHL+4YycQ376Wy9+elpaVGDUCd4MQCmVJ/vdTG+27+iEA//Fgx8DHwDKgIOf/n2CcsrzU8VIQfCAAu/kO79n3wkg2e8kD2AMfCqLASrmBZRc4XA4VHK9XnsdAoCzy6y9NIBnrWEsfAAQ1T8AM0QL2sgp4n36sntVAEy/KwC007QxBj6dAIEJcHcH07eghXGsa6U0TWg4U0pV2ed0SQBI98bnXaFoVAFJTQZvOLDZ8DUVvFlpBnA8Hmu7i8WiM4B74tP1qck26ijVSTee+Wp1G6MuyjBaUR0XYbSSvL43a/W18cNo9cDwsQ+oMRwDY/HlMUTdGZaIZsYHdl14xMuhjxWPrUvx28ZeXYEdlgPDhUOcbT5Q6lruyBtAmwPuPXIz/D6b/wEwuXBB+7CyJwAAAABJRU5ErkJggg==',
+  'cat2': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAACXBIWXMAAAsTAAALEwEAmpwYAAABuElEQVRYhe1XsUoDQRDdW4JoAoKgQiy1EcFS/AAbGy0EfyB10N5axDZiq50/EBH8hWAnIjZiIyoqCNGcYrPy1rxlOfY2u4mFcj4YspOZt7NvmNtLEqWUKDKkKDikKDqUUrk2Uh5XPt9lNpDv83thUL4P5rzKI/5m+0jhk0Y/pAE+fqj4QfjcI8/neUu+DV4fdkWrVhVX6bDxY4D8/eVRvV6YqvTFR/2zu050fYi93GqIuZ1NI5r+e/qc8LuSb5Prl08xMzYkZssfol9AOEEhoUA++PYeP91A6SKWKxO6axA/ub5kDsM14y50H5821shncawppNcYM458V/3Qx4C1fU2UWeGwtPNkRuSk0dQbrew19Rqw4xnuWzeu5x754IFPLmCPYFY4zI676vfixzRQ2gIwLgRELh7em84db6yK+mnbKZ5o1aoVTgfykA8eD4P9fIe36yPPVT+EH9NAmScGQuwLDIYCvvF38e3xAz/mLeCqH8oPbaB0kZPkO4dkdNC+wBDPWgw/FIPwQxsos0QmkRyL38QPaqCyfsCAeF6f15fIwdq0tsfbC3OxcJ1X/C/xqTv5/zcoio0v6Sr8VDTnp8YAAAAASUVORK5CYII='
 };
 
 // ── SpriteRenderer ─────────────────────────────────────────
 // CSS background-image + RAF. No canvas. No image load events.
 // Sheet 64x16 displayed at 128x32 (2x). backgroundPosition shifts per frame.
 
-const ANIMALS = ['frog', 'cat', 'rabbit', 'penguin', 'crab', 'rat', 'seal', 'snake'];
-const HUES = [0, 45, 90, 135, 180, 225, 270, 315]; // 8 maximally-spaced hue slots
-const FOLDER_COLORS_KEY = 'pixel-terminal-folder-colors-v2';
+const ANIMALS = ['cat', 'rabbit', 'penguin', 'rat', 'seal', 'snake', 'k-whale', 'cat2'];
+const HUES = [0, 45, 75, 135, 150, 210, 270, 285, 300, 345];
+const IDENTITY_SEQ_KEY = 'pixel-terminal-identity-seq-v6';
 
-function hashStr(s) {
-  // FNV-1a with MurmurHash3 finalizer — uniform distribution across all 32 bits
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
-  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
-  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
-  h ^= h >>> 16;
-  return h >>> 0; // unsigned 32-bit
-}
-
-function getFolderIdentity(cwd) {
-  const store = JSON.parse(localStorage.getItem(FOLDER_COLORS_KEY) || '{}');
-  if (store[cwd]) return store[cwd];
-  const h = hashStr(cwd);
-  const identity = {
-    animalIndex: h % ANIMALS.length,
-    hueIndex: (h >>> 4) % HUES.length,  // >>> not >> — avoids signed right-shift producing negative index
+function getNextIdentity() {
+  // Cycles animals before hues — all 8 animals appear before any repeats.
+  // No per-folder persistence; each new session gets the next in sequence.
+  const idx = (parseInt(localStorage.getItem(IDENTITY_SEQ_KEY) || '0', 10));
+  localStorage.setItem(IDENTITY_SEQ_KEY, idx + 1);
+  return {
+    animalIndex: idx % ANIMALS.length,
+    hueIndex: Math.floor(idx / ANIMALS.length) % HUES.length,
   };
-  store[cwd] = identity;
-  localStorage.setItem(FOLDER_COLORS_KEY, JSON.stringify(store));
-  return identity;
 }
 
 class SpriteRenderer {
@@ -134,7 +124,7 @@ async function isSelfDirectory(cwd) {
     dir = parent;
   }
   const results = await Promise.all(
-    paths.map(p => Command.create('test', ['-f', p]).execute().catch(() => ({ code: 1 })))
+    paths.map(p => Command.create('test', ['-f', p]).execute().catch(e => { console.warn('isSelfDirectory check failed:', e); return { code: 1 }; }))
   );
   return results.some(r => r.code === 0);
 }
@@ -157,7 +147,7 @@ let activeSessionId = null;
 async function createSession(cwd, opts = {}) {
   const id    = crypto.randomUUID();
   const name  = cwd.split('/').pop() || cwd;
-  const { animalIndex: charIndex, hueIndex } = getFolderIdentity(cwd);
+  const { animalIndex: charIndex, hueIndex } = getNextIdentity();
 
   sessionLogs.set(id, { messages: [] });
 

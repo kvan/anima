@@ -140,11 +140,11 @@ const hex = (h, a = 255) => [
 
 const FROG_PAL = {
   '.': [0,0,0,0],
-  'G': hex('#4aaa52'),   // frog green (body)
-  'g': hex('#2e7a35'),   // dark green (outline / shadow)
+  'G': hex('#72d87a'),   // frog green (body) — boosted lum ~0.52 to pop on dark bg
+  'g': hex('#2e7a35'),   // dark green (outline / shadow) — kept dark for contrast
   'B': hex('#111111'),   // black (pupil)
-  'W': hex('#e0f0e0'),   // eye white
-  'Y': hex('#c8d46a'),   // yellow-green (belly)
+  'W': hex('#f4fff6'),   // eye white — near-pure white for eye pop
+  'Y': hex('#dff080'),   // yellow-green (belly) — brighter highlight lum ~0.58
   'o': hex('#e8a040'),   // orange (mouth line)
 };
 
@@ -226,13 +226,13 @@ const FROG_F4 = [ // step — right leg forward
 
 const WHALE_PAL = {
   '.': [0,0,0,0],
-  'B': hex('#3a6fa8'),   // blue body
-  'b': hex('#2a5080'),   // dark blue (outline / shadow)
-  'W': hex('#ddf0ff'),   // white belly
+  'B': hex('#5090cc'),   // blue body — boosted lum ~0.24 (was 0.16) for dark bg pop
+  'b': hex('#2a5080'),   // dark blue (outline / shadow) — kept dark for contrast
+  'W': hex('#eef8ff'),   // white belly — near-pure white
   'E': hex('#111111'),   // eye
-  'e': hex('#ddf0ff'),   // eye white
-  'S': hex('#88ccff'),   // spout water
-  'T': hex('#4a90c8'),   // tail fins
+  'e': hex('#eef8ff'),   // eye white
+  'S': hex('#99d8ff'),   // spout water — slightly brighter
+  'T': hex('#5aa0d8'),   // tail fins — slightly brighter to match body boost
 };
 
 const WHALE_F1 = [ // tail level

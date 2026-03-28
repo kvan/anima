@@ -494,6 +494,7 @@ canvas.sprite-canvas {
   image-rendering: pixelated;
   display: block;
   flex-shrink: 0;
+  filter: saturate(1.1); /* global micro-boost — adds vibrancy for all sprites on dark bg */
 }
 
 .sprite-wrap {

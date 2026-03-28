@@ -30,7 +30,7 @@ check('src/sprites_old/ deleted', !fs.existsSync(ROOT + '/src/sprites_old'));
 
 // ── app.js structural checks ──────────────────────────────
 const src = fs.readFileSync(ROOT + '/src/app.js', 'utf8');
-check('scheduleScroll() defined', src.includes('function scheduleScroll()'));
+check('scheduleScroll() defined', src.includes('function scheduleScroll('));
 check('_scrollPending flag', src.includes('_scrollPending'));
 check('DocumentFragment in renderMessageLog', src.includes('createDocumentFragment'));
 check('.msg-new added in pushMessage', src.includes("el.classList.add('msg-new')"));

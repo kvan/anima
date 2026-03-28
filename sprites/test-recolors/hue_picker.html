@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hue Picker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d1117;
+    color: #e6edf3;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    padding: 24px;
+  }
+  h1 { font-size: 13px; color: #484f58; margin-bottom: 24px; font-weight: normal; }
+
+  /* ── Animal/hue grid ── */
+  .section { margin-bottom: 40px; }
+  .section-title {
+    font-size: 11px;
+    color: #484f58;
+    margin-bottom: 12px;
+  }
+
+  .hue-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 80px);
+    gap: 6px;
+  }
+
+  .hue-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .sprite-wrap {
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: #161b22;
+    border: 2px solid #21262d;
+    transition: border-color 0.1s, background 0.1s;
+  }
+  .hue-cell:hover .sprite-wrap { border-color: #58a6ff; background: #1c2128; }
+  .hue-cell.selected .sprite-wrap { border-color: #3fb950; background: #0d2b0d; }
+  .sprite {
+    width: 64px;
+    height: 64px;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    image-rendering: pixelated;
+    background-size: 256px 64px;
+  }
+  .hue-deg {
+    font-size: 10px;
+    color: #484f58;
+    transition: color 0.1s;
+  }
+  .hue-cell:hover .hue-deg { color: #7d8590; }
+  .hue-cell.selected .hue-deg { color: #3fb950; }
+
+  /* ── Animal toggle bar ── */
+  .animal-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 32px;
+  }
+  .animal-btn {
+    padding: 5px 12px;
+    border-radius: 4px;
+    border: 1px solid #21262d;
+    background: #161b22;
+    color: #7d8590;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+  .animal-btn:hover { border-color: #58a6ff; color: #e6edf3; }
+  .animal-btn.selected { border-color: #3fb950; background: #0d2b0d; color: #3fb950; }
+
+  /* ── Output ── */
+  .output-bar {
+    padding: 16px 20px;
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    max-width: 700px;
+  }
+  .output-bar h2 { font-size: 11px; color: #484f58; font-weight: normal; margin-bottom: 10px; }
+  #output { color: #3fb950; font-size: 13px; line-height: 2; white-space: pre; }
+</style>
+</head>
+<body>
+
+<h1>// click a hue to toggle · click an animal to toggle</h1>
+
+<!-- Animal toggle bar -->
+<div class="animal-bar" id="animal-bar"></div>
+
+<!-- One hue grid per animal -->
+<div id="sections"></div>
+
+<div class="output-bar">
+  <h2>// paste into app.js</h2>
+  <div id="output"></div>
+</div>
+
+<script>
+const ALL_ANIMALS = [
+  { name: 'cat',     file: '../cat.png'     },
+  { name: 'rabbit',  file: '../rabbit.png'  },
+  { name: 'penguin', file: '../penguin.png' },
+  { name: 'crab',    file: '../crab.png'    },
+  { name: 'rat',     file: '../rat.png'     },
+  { name: 'seal',    file: '../seal.png'    },
+  { name: 'snake',   file: '../snake.png'   },
+  { name: 'k-whale', file: '../k-whale.png' },
+  { name: 'cat2',    file: '../cat2.png'    },
+];
+
+const ALL_HUES = Array.from({ length: 24 }, (_, i) => i * 15);
+
+// ── Persistence ──────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'hue-picker-state';
+
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; }
+}
+function saveState() {
+  const state = {
+    animals: [...selectedAnimals],
+    animalHues: Object.fromEntries(
+      Object.entries(animalHues).map(([k, v]) => [k, [...v]])
+    ),
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+const saved = loadState();
+
+// Current selections — restore from localStorage if available
+const selectedAnimals = new Set(
+  saved.animals ?? ['cat', 'rabbit', 'penguin', 'crab', 'rat', 'seal', 'snake', 'k-whale']
+);
+const defaultHues = new Set([0, 45, 90, 105, 120, 135, 210, 225, 270, 285, 345]);
+
+// Per-animal hue selections — restore from localStorage if available
+const animalHues = {};
+for (const a of ALL_ANIMALS) {
+  const restored = saved.animalHues?.[a.name];
+  animalHues[a.name] = restored ? new Set(restored) : new Set(defaultHues);
+}
+
+// ── Build animal bar ─────────────────────────────────────────────────────────
+const animalBar = document.getElementById('animal-bar');
+for (const a of ALL_ANIMALS) {
+  const btn = document.createElement('button');
+  btn.className = 'animal-btn' + (selectedAnimals.has(a.name) ? ' selected' : '');
+  btn.textContent = a.name;
+  btn.dataset.animal = a.name;
+  btn.addEventListener('click', () => {
+    selectedAnimals.has(a.name) ? selectedAnimals.delete(a.name) : selectedAnimals.add(a.name);
+    btn.classList.toggle('selected', selectedAnimals.has(a.name));
+    document.getElementById(`section-${a.name}`).style.display =
+      selectedAnimals.has(a.name) ? '' : 'none';
+    saveState();
+    updateOutput();
+  });
+  animalBar.appendChild(btn);
+}
+
+// ── Build hue grids ──────────────────────────────────────────────────────────
+const sections = document.getElementById('sections');
+
+for (const a of ALL_ANIMALS) {
+  const section = document.createElement('div');
+  section.className = 'section';
+  section.id = `section-${a.name}`;
+  if (!selectedAnimals.has(a.name)) section.style.display = 'none';
+
+  const title = document.createElement('div');
+  title.className = 'section-title';
+  title.textContent = `// ${a.name}`;
+  section.appendChild(title);
+
+  const hueGrid = document.createElement('div');
+  hueGrid.className = 'hue-grid';
+
+  for (const hue of ALL_HUES) {
+    const cell = document.createElement('div');
+    cell.className = 'hue-cell' + (animalHues[a.name].has(hue) ? ' selected' : '');
+    cell.dataset.animal = a.name;
+    cell.dataset.hue = hue;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'sprite-wrap';
+
+    const sprite = document.createElement('div');
+    sprite.className = 'sprite';
+    sprite.style.backgroundImage = `url('${a.file}')`;
+    if (hue > 0) sprite.style.filter = `hue-rotate(${hue}deg) saturate(1.4)`;
+
+    wrap.appendChild(sprite);
+    cell.appendChild(wrap);
+
+    const label = document.createElement('div');
+    label.className = 'hue-deg';
+    label.textContent = `${hue}°`;
+    cell.appendChild(label);
+
+    cell.addEventListener('click', () => {
+      const set = animalHues[a.name];
+      set.has(hue) ? set.delete(hue) : set.add(hue);
+      cell.classList.toggle('selected', set.has(hue));
+      saveState();
+      updateOutput();
+    });
+
+    hueGrid.appendChild(cell);
+  }
+
+  section.appendChild(hueGrid);
+  sections.appendChild(section);
+}
+
+// ── Output ───────────────────────────────────────────────────────────────────
+function updateOutput() {
+  // Derive a shared HUES = union of all selected-animal hue sets
+  const animals = ALL_ANIMALS.filter(a => selectedAnimals.has(a.name));
+  const unionHues = new Set();
+  for (const a of animals) for (const h of animalHues[a.name]) unionHues.add(h);
+  const hues = [...unionHues].sort((a, b) => a - b);
+  const animalList = animals.map(a => `'${a.name}'`);
+  document.getElementById('output').textContent =
+    `const ANIMALS = [${animalList.join(', ')}];\nconst HUES    = [${hues.join(', ')}];`;
+}
+
+updateOutput();
+</script>
+</body>
+</html>
