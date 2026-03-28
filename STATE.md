@@ -1,32 +1,31 @@
 # STATE.md — Working State (re-read after compaction)
-## Updated: 2026-03-27 13:54
+## Updated: 2026-03-28 00:50
 
 ### Active Work
-- Hand-drawn frog sprite imported and wired as default character
-- User's feature question pending: unique recolor per folder, persisted across sessions
+- Sprite identity system: round-robin sequencer, 9 animals × 4 hues = 36 combos
+- frog2 added to SPRITE_DATA + ANIMALS; HUES = [0, 120, 195, 270]
+- Pending commit: frog2 addition + HUES trim to 4
 
 ### Key IDs
 - Collection: pixel_terminal (gemini-memory)
-- Tauri commands: read_slash_commands, read_slash_command_content
+- localStorage key: 'pixel-terminal-identity-seq-v6'
+- ANIMALS: ['cat','rabbit','penguin','rat','seal','snake','k-whale','cat2','frog2']
+- HUES: [0, 120, 195, 270]
 
 ### Decisions This Session
-- slash command expansion via read_slash_command_content Rust cmd
-- unknown slash command: warn-msg type (orange), block send
-- token fix: input_tokens + output_tokens only (no cache fields)
-- font sizes: 12px messages, 11px code/tools
-- CSS spacing: p:last-child, pre, ol/ul:last-child margin-bottom:0
-- sprite-gen.js shelved; frog imported from PSD via sips+Pillow, added to SPRITE_DATA
-- frog set as ANIMALS[0] — default main character
-- whale never wired into app.js, deleted from scope
-- mirrorLeft() + recolor() helpers added to sprite-gen.js
+- Round-robin: animalIndex = idx % N, hueIndex = floor(idx/N) % H — animals cycle before hues
+- No per-folder persistence — each new session gets next combo in sequence
+- 9 animals × 4 hues = 36 unique combos before repeat
+- frog2-sprite.png added; hues selected: 0°, 120°, 195°, 270°
+- hue_picker.html: per-animal independent cell selection, localStorage persistence
 
 ### Blockers
-- None
+- Per-animal hue subsetting not yet implemented (all animals share same HUES pool)
 
 ### Last Session Snapshot
-Date: 2026-03-27
+Date: 2026-03-28
 Open actions:
-- [ ] Test in tauri dev: slash expansion, unknown command warn, token count, spacing
-- [ ] Answer/implement: unique recolor per folder, persisted across sessions
-Decisions: 30 | Fixes: 28
-Next: → npm run tauri dev smoke test, then evaluate folder-color-animal feature
+- [ ] Commit frog2 + HUES=[0,120,195,270] — context: staged but not committed
+- [ ] Per-animal hue subsets — context: user wants each animal only at its picked hues, not all 4
+Decisions: 42 | Fixes: 33
+Next: → commit frog2 changes, then implement per-animal hue map
