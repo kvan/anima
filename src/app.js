@@ -38,16 +38,22 @@ const SPRITE_DATA = {
 
 const ANIMALS = ['cat', 'rabbit', 'penguin', 'rat', 'seal', 'snake', 'k-whale', 'cat2', 'frog2'];
 const HUES = [0, 120, 195, 270];
-const IDENTITY_SEQ_KEY = 'pixel-terminal-identity-seq-v6';
+const IDENTITY_SEQ_KEY = 'pixel-terminal-identity-seq-v7';
 
 function getNextIdentity() {
-  // Cycles animals before hues — all 8 animals appear before any repeats.
-  // No per-folder persistence; each new session gets the next in sequence.
-  const idx = (parseInt(localStorage.getItem(IDENTITY_SEQ_KEY) || '0', 10));
-  localStorage.setItem(IDENTITY_SEQ_KEY, idx + 1);
+  // Animal order: global counter cycles all 9 animals before any repeats.
+  // Hue order: per-animal counter — first appearance always gets hue 0 (original color),
+  //            subsequent appearances advance through HUES independently per animal.
+  const store = JSON.parse(localStorage.getItem(IDENTITY_SEQ_KEY) || '{"idx":0,"counts":{}}');
+  const animalIndex = store.idx % ANIMALS.length;
+  const animal = ANIMALS[animalIndex];
+  const count = store.counts[animal] || 0;
+  store.counts[animal] = count + 1;
+  store.idx = store.idx + 1;
+  localStorage.setItem(IDENTITY_SEQ_KEY, JSON.stringify(store));
   return {
-    animalIndex: idx % ANIMALS.length,
-    hueIndex: Math.floor(idx / ANIMALS.length) % HUES.length,
+    animalIndex,
+    hueIndex: count % HUES.length,
   };
 }
 
