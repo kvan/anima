@@ -16,8 +16,11 @@ import {
 } from './session.js';
 import {
   createSession, spawnClaude, killSession, sendMessage,
-  expandSlashCommand, pickFolder, setLifecycleDeps
+  expandSlashCommand, warnIfUnknownCommand, pickFolder, setLifecycleDeps
 } from './session-lifecycle.js';
+import { pushMessage, updateWorkingCursor, scheduleScroll, setPinToBottom, getPinToBottom, renderMessageLog } from './messages.js';
+import { handleEvent, setStatus, setEventDeps } from './events.js';
+import { renderSessionCard, updateSessionCard, setActiveSession, showEmptyState, showChatView } from './cards.js';
 
 // ── Tauri globals ──────────────────────────────────────────
 
@@ -25,380 +28,7 @@ const { Command } = window.__TAURI__.shell;
 const { invoke } = window.__TAURI__.core;
 
 
-// activeSessionId: local alias backed by getter/setter in session.js
-let activeSessionId = null;
-function _syncActiveSessionId() { activeSessionId = getActiveSessionId(); }
-
-// ── Event handler ──────────────────────────────────────────
-
-function handleEvent(id, event) {
-  const s = sessions.get(id);
-  if (!s) return;
-
-  switch (event.type) {
-
-    case 'assistant': {
-      // Cancel any pending idle debounce — Claude is still going
-      clearTimeout(s._idleTimer);
-      if (event.message?.usage) {
-        s._lastMsgUsage = event.message.usage;
-        const u = event.message.usage;
-        // Only count input+output — cache_read recurs every turn (already-counted context),
-        // causing exponential inflation. cache_creation has the same problem.
-        s._liveTokens = (u.input_tokens || 0) + (u.output_tokens || 0);
-      }
-      const blocks = event.message?.content || [];
-
-      const texts = blocks.filter(b => b.type === 'text').map(b => b.text);
-      if (texts.length) pushMessage(id, { type: 'claude', text: texts.join('\n') });
-
-      for (const b of blocks) {
-        if (b.type === 'tool_use') {
-          const input = typeof b.input === 'object'
-            ? JSON.stringify(b.input, null, 2)
-            : String(b.input || '');
-          if (!isInternalTool(b.name)) {
-            pushMessage(id, { type: 'tool', toolName: b.name, toolId: b.id, input, result: null });
-          }
-          s.toolPending[b.id] = true;
-        }
-      }
-      setStatus(id, 'working'); // no-op if already working — so always refresh card for live tokens
-      updateSessionCard(id);
-      break;
-    }
-
-    case 'user': {
-      const blocks = event.message?.content || [];
-      for (const b of blocks) {
-        if (b.type === 'tool_result') {
-          const resultText = typeof b.content === 'string'
-            ? b.content
-            : JSON.stringify(b.content);
-          const data = sessionLogs.get(id);
-          // tool_use always precedes tool_result — scan from end, no reverse copy needed
-          const toolMsg = data
-            ? data.messages.findLast(m => m.type === 'tool' && m.toolId === b.tool_use_id)
-            : null;
-          if (toolMsg) {
-            toolMsg.result = resultText;
-            if (activeSessionId === id) {
-              // Targeted update: swap just the status glyph instead of rebuilding all messages
-              const toolEl = $.messageLog?.querySelector(`[data-tool-id="${b.tool_use_id}"]`);
-              if (toolEl) {
-                toolEl.querySelector('.tool-status').textContent = '✓';
-              }
-            }
-          }
-          delete s.toolPending[b.tool_use_id];
-        }
-      }
-      break;
-    }
-
-    case 'result': {
-      // Prefer result.usage (per-turn total); fall back to live tokens already shown
-      const u = event.usage || s._lastMsgUsage;
-      if (u) s.tokens += (u.input_tokens || 0) + (u.output_tokens || 0);
-      else s.tokens += s._liveTokens; // result.usage absent and no assistant usage either
-      s._liveTokens = 0;
-      s._lastMsgUsage = null;
-      // Debounce: Claude may immediately start another turn after result.
-      // Wait 400ms before going idle so the cursor doesn't flicker between turns.
-      clearTimeout(s._idleTimer);
-      s._idleTimer = setTimeout(() => {
-        setStatus(id, 'idle');
-        if (activeSessionId !== id) {
-          s.unread = true;
-          updateSessionCard(id);
-        }
-      }, 400);
-      break;
-    }
-
-    case 'system':
-      if (event.subtype === 'init') {
-        pushMessage(id, { type: 'system-msg', text: `Ready · ${event.model || 'claude'}` });
-        // After ESC restart, always go idle regardless of status.
-        // Otherwise: don't clobber 'working' if user queued a message before init.
-        if (s._restarting || s.status !== 'working') setStatus(id, 'idle');
-        s._restarting = false;
-        // Flush message queued before Claude was ready.
-        // pushMessage here so it appears AFTER "Ready" in the log.
-        if (s._pendingMsg && s.child) {
-          const msg = s._pendingMsg;
-          s._pendingMsg = null;
-          if (warnIfUnknownCommand(id, msg)) break;
-          pushMessage(id, { type: 'user', text: msg }); // show original
-          expandSlashCommand(msg).then(expanded => {
-            if (!s.child) return;
-            return s.child.write(JSON.stringify({ type: 'user', message: { role: 'user', content: expanded } }) + '\n');
-          }).catch(() => {
-            pushMessage(id, { type: 'error', text: 'Failed to send — please resend your message' });
-            setStatus(id, 'idle');
-          });
-        }
-      }
-      break;
-
-    case 'rate_limit_event':
-      pushMessage(id, { type: 'system-msg', text: `Rate limited — retrying…` });
-      break;
-  }
-}
-
-// ── Status ─────────────────────────────────────────────────
-
-function setStatus(id, status) {
-  const s = sessions.get(id);
-  if (!s || s.status === status) return;
-  if (status === 'working') s._dotsPhase = 0; // always start from "" on new working transition
-  s.status = status;
-  updateSessionCard(id);
-  if (activeSessionId === id) updateWorkingCursor(status);
-}
-
-// Tools that are Claude Code internal scaffolding — never show in UI
-const INTERNAL_TOOLS = new Set([
-  'ToolSearch','TodoWrite','TodoRead','AskUserQuestion',
-  'TaskCreate','TaskUpdate','TaskList','TaskGet','TaskStop','TaskOutput',
-  'ExitPlanMode','EnterPlanMode','NotebookEdit',
-  'RemoteTrigger','CronCreate','CronDelete','CronList',
-  'ListMcpResourcesTool','ReadMcpResourceTool',
-  'EnterWorktree','ExitWorktree',
-]);
-function isInternalTool(name) {
-  return name.startsWith('mcp__') || INTERNAL_TOOLS.has(name);
-}
-
-const WORKING_MSGS = [
-  'thinking', 'scheming', 'deliberating', 'gallivanting', 'pondering',
-  'contemplating', 'ruminating', 'cogitating', 'hypothesizing', 'spelunking',
-  'wrangling', 'untangling', 'cross-referencing', 'noodling', 'vibing',
-  'consulting the void', 'reading the entrails', 'asking nicely',
-  'summoning context', 'doing its thing',
-];
-let _workingTimer = null;
-let _workingMsgIdx = 0;
-
-function updateWorkingCursor(status) {
-  if (!$.messageLog) return;
-  let cur = document.getElementById('working-cursor');
-  if (status === 'working') {
-    if (!cur) {
-      cur = document.createElement('div');
-      cur.id = 'working-cursor';
-      $.messageLog.appendChild(cur);
-      scheduleScroll();
-    }
-    // Build cursor structure once, update text node only — avoid innerHTML re-parsing every 3s
-    if (!cur.firstChild) {
-      const glyph = document.createElement('span');
-      glyph.className = 'cursor-blink';
-      glyph.textContent = '▋';
-      cur.appendChild(glyph);
-      cur.appendChild(document.createTextNode(''));
-    }
-    const textNode = cur.lastChild;
-    const setMsg = () => {
-      textNode.textContent = ' ' + WORKING_MSGS[_workingMsgIdx++ % WORKING_MSGS.length] + '…';
-    };
-    setMsg();
-    clearInterval(_workingTimer);
-    _workingTimer = setInterval(setMsg, 3000);
-  } else {
-    clearInterval(_workingTimer);
-    _workingTimer = null;
-    cur?.remove();
-  }
-}
-
-// ── Message log ────────────────────────────────────────────
-
-// rAF-coalesced scroll — only scrolls if user hasn't manually scrolled up
-let _scrollPending = false;
-let _pinToBottom = true; // false when user scrolls up; restored when user scrolls back down or sends a message
-
-function scheduleScroll(force = false) {
-  if (!force && !_pinToBottom) return;
-  if (_scrollPending) return;
-  _scrollPending = true;
-  requestAnimationFrame(() => {
-    _scrollPending = false;
-    if ($.messageLog) $.messageLog.lastElementChild?.scrollIntoView({ block: 'end' });
-  });
-}
-
-function pushMessage(id, msg) {
-  const data = sessionLogs.get(id);
-  if (!data) return;
-  data.messages.push(msg);
-  if (activeSessionId === id) {
-    if ($.messageLog) {
-      // Insert BEFORE the working cursor so cursor stays at bottom
-      const cursor = document.getElementById('working-cursor');
-      const el = createMsgEl(msg);
-      el.classList.add('msg-new');
-      if (cursor) $.messageLog.insertBefore(el, cursor);
-      else $.messageLog.appendChild(el);
-      scheduleScroll();
-    }
-  }
-}
-
-function renderMessageLog(id) {
-  if (!$.messageLog) return;
-  $.messageLog.innerHTML = ''; // cursor gets wiped here — restore below
-  const data = sessionLogs.get(id);
-  if (data) {
-    // DocumentFragment: build all elements off-DOM, single reflow on append
-    const frag = document.createDocumentFragment();
-    for (const msg of data.messages) frag.appendChild(createMsgEl(msg));
-    $.messageLog.appendChild(frag);
-  }
-  // Always restore cursor to match current session status
-  const s = sessions.get(id);
-  if (s && s.status === 'working') {
-    updateWorkingCursor(s.status);
-  }
-  scheduleScroll();
-}
-
-function createMsgEl(msg) {
-  const el = document.createElement('div');
-  el.className = `msg ${msg.type}`;
-
-  if (msg.type === 'user') {
-    el.innerHTML = `<div class="msg-bubble">${esc(msg.text)}</div>`;
-
-  } else if (msg.type === 'claude') {
-    // Cache parsed HTML — msg.text is immutable after creation
-    if (!msg._html) {
-      const normalized = msg.text.replace(/\n\n(?=[ \t]*(?:\d+[.)]\s|[-*+]\s))/g, '\n');
-      msg._html = mdParse(normalized);
-    }
-    el.innerHTML = `<div class="msg-bubble">${msg._html}</div>`;
-    // Orange for the last paragraph regardless of trailing hr/empty nodes
-    const paras = el.querySelectorAll('.msg-bubble p');
-    if (paras.length) paras[paras.length - 1].style.color = '#e8820c';
-
-  } else if (msg.type === 'tool') {
-    const icon = toolIcon(msg.toolName);
-    // Cache hint — msg.input is immutable after creation
-    if (msg._hint === undefined) msg._hint = toolHint(msg.toolName, msg.input);
-    const hint = msg._hint;
-    const hasResult = msg.result !== null && msg.result !== undefined;
-    const status = hasResult ? '✓' : '…';
-    el.dataset.toolId = msg.toolId;
-    el.innerHTML = `<div class="tool-line">${icon} <span class="tool-name">${esc(msg.toolName)}</span>${hint ? ` <span class="tool-hint">${esc(hint)}</span>` : ''} <span class="tool-status">${status}</span></div>`;
-
-  } else if (msg.type === 'system-msg') {
-    el.innerHTML = `<div class="system-label">${esc(msg.text)}</div>`;
-
-  } else if (msg.type === 'error') {
-    el.innerHTML = `<div class="error-msg">${esc(msg.text)}</div>`;
-  } else if (msg.type === 'warn') {
-    el.innerHTML = `<div class="warn-msg">${esc(msg.text)}</div>`;
-  }
-
-  return el;
-}
-
-// ── Session cards ──────────────────────────────────────────
-
-function renderSessionCard(id) {
-  const s = sessions.get(id);
-  if (!s) return;
-
-  const card = document.createElement('div');
-  card.className = 'session-card';
-  card.id = `card-${id}`;
-  card.innerHTML = `
-    <div class="session-card-top">
-      <div class="sprite-wrap" id="card-sprite-wrap-${id}"></div>
-      <div class="session-card-info">
-        <div class="session-card-name">${esc(s.name)}</div>
-        <div class="session-card-tokens" id="card-tokens-${id}"></div>
-      </div>
-      <span class="card-badge" id="card-status-${id}"></span>
-    </div>
-    <button class="session-card-kill" title="Kill session" data-id="${id}">✕</button>
-  `;
-
-  card.addEventListener('click', (e) => {
-    if (e.target.closest('.session-card-kill')) return;
-    setActiveSession(id);
-  });
-  card.querySelector('.session-card-kill').addEventListener('click', async (e) => {
-    e.stopPropagation();
-    const ok = await showConfirm(`Terminate "${s.name}"? This will end the session.`);
-    if (ok) killSession(id);
-  });
-  $.sessionList.appendChild(card);
-
-  // Attach sprite renderer to the wrap div
-  const wrap = document.getElementById(`card-sprite-wrap-${id}`);
-  spriteRenderers.set(id, new SpriteRenderer(wrap, s.charIndex));
-}
-
-function updateSessionCard(id) {
-  const s = sessions.get(id);
-  if (!s) return;
-
-  spriteRenderers.get(id)?.setStatus(s.status);
-
-  const statusEl = document.getElementById(`card-status-${id}`);
-  if (statusEl) {
-    if (s.unread) {
-      statusEl.textContent = 'NEW';
-      statusEl.className = 'card-badge unread';
-    } else {
-      const label = { idle: 'IDLE', error: 'ERR', working: '.'.repeat(s._dotsPhase || 0), waiting: '···' }[s.status] ?? '···';
-      statusEl.textContent = label;
-      statusEl.className = `card-badge ${s.status}`;
-    }
-    statusEl.style.display = '';
-  }
-
-  const tokensEl = document.getElementById(`card-tokens-${id}`);
-  if (tokensEl) {
-    tokensEl.textContent = formatTokens(s.tokens + (s._liveTokens || 0));
-  }
-
-  const card = document.getElementById(`card-${id}`);
-  if (card) card.classList.toggle('active', activeSessionId === id);
-}
-
-// ── Session switching ──────────────────────────────────────
-
-function setActiveSession(id) {
-  const prev = activeSessionId;
-  activeSessionId = id;
-  setActiveSessionId(id);
-  _pinToBottom = true;
-  const viewedSession = sessions.get(id);
-  if (viewedSession) viewedSession.unread = false;
-  if (prev && prev !== id) updateSessionCard(prev);
-  updateSessionCard(id);
-  showChatView();
-  renderMessageLog(id);
-  const s = sessions.get(id);
-  if (s) updateWorkingCursor(s.status);
-  $.inputField?.focus();
-  syncOmiSessions();
-}
-
-// ── View helpers ───────────────────────────────────────────
-
-function showEmptyState() {
-  $.messageLog.innerHTML = '';
-}
-
-function showChatView() {
-  // intentionally no-op — never disable controls in a terminal app
-}
-
-
+// Event handler, status, messages, cards: moved to events.js, messages.js, cards.js
 
 // ── Slash command / flag autocomplete menu ──────────────────
 
@@ -572,6 +202,11 @@ setLifecycleDeps({
   hideSlashMenu,
 });
 
+setEventDeps({
+  expandSlashCommand,
+  warnIfUnknownCommand,
+});
+
 window.addEventListener('DOMContentLoaded', () => {
   initDOM();
 
@@ -605,7 +240,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Track whether user has scrolled up — suppress auto-scroll if so
   $.messageLog.addEventListener('scroll', () => {
-    _pinToBottom = $.messageLog.scrollTop + $.messageLog.clientHeight >= $.messageLog.scrollHeight - 40;
+    setPinToBottom($.messageLog.scrollTop + $.messageLog.clientHeight >= $.messageLog.scrollHeight - 40);
   });
 
   // Sidebar resize
@@ -687,12 +322,12 @@ window.addEventListener('DOMContentLoaded', () => {
   $.btnSend.addEventListener('click', () => {
     const input = $.inputField;
     const text = input.value;
-    if (!text.trim() || !activeSessionId) return;
+    if (!text.trim() || !getActiveSessionId()) return;
     input.value = '';
     input.style.height = ''; // reset to rows="1" — avoids WebKit scrollHeight=0 collapse
-    _pinToBottom = true;
+    setPinToBottom(true);
     hideSlashMenu();
-    sendMessage(activeSessionId, text);
+    sendMessage(getActiveSessionId(), text);
   });
 
   $.inputField.addEventListener('keydown', (e) => {
@@ -712,12 +347,12 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       const text = $.inputField.value;
-      if (!text.trim() || !activeSessionId) return;
+      if (!text.trim() || !getActiveSessionId()) return;
       $.inputField.value = '';
       $.inputField.style.height = '';
-      _pinToBottom = true;
+      setPinToBottom(true);
       hideSlashMenu();
-      sendMessage(activeSessionId, text);
+      sendMessage(getActiveSessionId(), text);
     }
   });
 
@@ -746,18 +381,18 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!$.slashMenu.classList.contains('hidden')) return; // slash menu: handled by its own listener
     if (!$.confirmOverlay?.classList.contains('hidden')) return; // confirm modal: has its own Esc handler
     if (settingsOpen) { settingsOpen = false; _settingsUpdate(); return; } // close settings panel, don't kill Claude
-    if (activeSessionId) {
-      const s = sessions.get(activeSessionId);
+    if (getActiveSessionId()) {
+      const s = sessions.get(getActiveSessionId());
       if (s && s.child && (s.status === 'working' || s.status === 'waiting')) {
         e.preventDefault();
         s._interrupting = true;
         try { s.child.kill(); } catch (_) {}
         s.child = null;
         clearTimeout(s._idleTimer);
-        pushMessage(activeSessionId, { type: 'system-msg', text: 'Interrupted — restarting…' });
-        setStatus(activeSessionId, 'waiting');
+        pushMessage(getActiveSessionId(), { type: 'system-msg', text: 'Interrupted \u2014 restarting\u2026' });
+        setStatus(getActiveSessionId(), 'waiting');
         s._restarting = true;
-        spawnClaude(activeSessionId);
+        spawnClaude(getActiveSessionId());
       }
     }
   });
@@ -831,16 +466,16 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   function resolveSession(ref) {
-    if (ref == null) return activeSessionId;
+    if (ref == null) return getActiveSessionId();
     if (typeof ref === 'number') {
       const keys = [...sessions.keys()];
-      return keys[ref - 1] || activeSessionId;
+      return keys[ref - 1] || getActiveSessionId();
     }
     const needle = String(ref).toLowerCase();
     for (const [id, s] of sessions) {
       if (s.name.toLowerCase().includes(needle)) return id;
     }
-    return activeSessionId;
+    return getActiveSessionId();
   }
 
   tauriListen('omi:command', (event) => {
@@ -864,7 +499,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const lines = [...sessions.entries()]
         .map(([_, s], i) => `${i + 1}. ${s.name} [${s.status}]`)
         .join('\n');
-      pushMessage(activeSessionId, { type: 'system-msg', text: `Omi sessions:\n${lines}` });
+      pushMessage(getActiveSessionId(), { type: 'system-msg', text: `Omi sessions:\n${lines}` });
     }
   });
 
