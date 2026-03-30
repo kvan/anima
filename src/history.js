@@ -23,8 +23,16 @@ let _entries = [];       // cached scan results (SessionHistoryEntry[])
 let _filtered = [];      // after search filter
 let _activeId = null;    // session_id of currently viewed history entry
 let _cachedMsgs = {};    // session_id → SessionHistoryMessage[] (avoid re-fetch)
+let _scrollPos = {};     // session_id → scrollTop (persist across tab switches)
 let _scannedCwd = null;  // cwd last scanned (to avoid duplicate scans)
 let _searchTimer = null;
+let _findOpen = false;
+// In-log find state
+let _findRanges = [];    // Range[] — all matches within #message-log
+let _findIdx = -1;       // currently highlighted match index
+let _findLastQuery = ''; // last searched query (detect change → rebuild ranges)
+
+export function isHistoryActive() { return _activeId !== null; }
 
 // ── Public API ──────────────────────────────────────────────
 
@@ -38,13 +46,31 @@ export function initHistory() {
     });
   });
 
-  // Search input
+  // Sidebar search input
   if ($.historySearch) {
     $.historySearch.addEventListener('input', (e) => {
       clearTimeout(_searchTimer);
       _searchTimer = setTimeout(() => filterHistory(e.target.value.trim()), 300);
     });
   }
+
+  // Save scroll position while browsing history
+  if ($.messageLog) {
+    $.messageLog.addEventListener('scroll', () => {
+      if (_activeId) _scrollPos[_activeId] = $.messageLog.scrollTop;
+    });
+  }
+
+  // Find bar wiring — search only triggers on Enter or button click, never on input event
+  if ($.historyFindInput) {
+    $.historyFindInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); runFind(e.shiftKey); }
+      if (e.key === 'Escape') { e.preventDefault(); hideHistoryFind(); }
+    });
+  }
+  if ($.historyFindNext) $.historyFindNext.addEventListener('click', () => runFind(false));
+  if ($.historyFindPrev) $.historyFindPrev.addEventListener('click', () => runFind(true));
+  if ($.historyFindClose) $.historyFindClose.addEventListener('click', hideHistoryFind);
 }
 
 /** Scan history for the given project cwd. Idempotent — skips if already scanned. */
@@ -71,26 +97,55 @@ export async function refreshHistory(cwd) {
 }
 
 export function showHistoryTab() {
-  // Activate tab button
   document.querySelectorAll('.session-tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === 'hist');
   });
   $.sessionList?.classList.add('hidden');
   $.historyView?.classList.remove('hidden');
+
+  // If a history session was loaded before, restore it with saved scroll position
+  if (_activeId && _cachedMsgs[_activeId]) {
+    renderHistoryMessages(_cachedMsgs[_activeId], /* restoreScroll= */ true);
+  }
 }
 
 export function showLiveTab() {
+  // Save scroll position before leaving history view
+  if (_activeId && $.messageLog) {
+    _scrollPos[_activeId] = $.messageLog.scrollTop;
+  }
+
   document.querySelectorAll('.session-tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === 'live');
   });
   $.historyView?.classList.add('hidden');
   $.sessionList?.classList.remove('hidden');
-  exitHistoryView();
+
+  // Close find bar if open
+  hideHistoryFind();
+
+  // Restore live session log without clearing history state
+  const liveId = _deps.getActiveSessionId?.();
+  if (liveId && _deps.renderMessageLog) {
+    _deps.renderMessageLog(liveId);
+  }
+  // Re-enable input
+  if ($.inputField) {
+    $.inputField.disabled = false;
+    $.inputField.placeholder = 'Message Claude Code...';
+  }
+  if ($.btnSend) $.btnSend.disabled = false;
 }
 
+/** Called when user clicks a live session card — fully exits history mode. */
 export function exitHistoryView() {
   if (!_activeId) return;
+
+  // Save scroll before clearing
+  if ($.messageLog) _scrollPos[_activeId] = $.messageLog.scrollTop;
   _activeId = null;
+
+  hideHistoryFind();
 
   // Re-enable input
   if ($.inputField) {
@@ -102,11 +157,107 @@ export function exitHistoryView() {
   // Remove active highlight from history cards
   document.querySelectorAll('.history-card').forEach(c => c.classList.remove('active'));
 
+  // Switch sidebar to LIVE tab
+  document.querySelectorAll('.session-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === 'live');
+  });
+  $.historyView?.classList.add('hidden');
+  $.sessionList?.classList.remove('hidden');
+
   // Restore the live session's message log
   const activeId = _deps.getActiveSessionId?.();
   if (activeId && _deps.renderMessageLog) {
     _deps.renderMessageLog(activeId);
   }
+}
+
+// ── Find in history ──────────────────────────────────────────
+
+export function showHistoryFind() {
+  if (!_activeId) return;
+  _findOpen = true;
+  $.historyFind?.classList.remove('hidden');
+  if ($.historyFindInput) {
+    $.historyFindInput.value = '';
+    $.historyFindInput.focus();
+  }
+  if ($.historyFindStatus) $.historyFindStatus.textContent = '';
+  _findRanges = [];
+  _findIdx = -1;
+  _findLastQuery = '';
+}
+
+function hideHistoryFind() {
+  if (!_findOpen) return;
+  _findOpen = false;
+  $.historyFind?.classList.add('hidden');
+  window.getSelection()?.removeAllRanges();
+  _findRanges = [];
+  _findIdx = -1;
+  _findLastQuery = '';
+}
+
+function runFind(backwards) {
+  const query = $.historyFindInput?.value?.trim() || '';
+  if (!query) {
+    window.getSelection()?.removeAllRanges();
+    if ($.historyFindStatus) $.historyFindStatus.textContent = '';
+    return;
+  }
+
+  // Rebuild range list whenever query changes
+  if (query !== _findLastQuery) {
+    _findRanges = buildFindRanges(query);
+    _findLastQuery = query;
+    _findIdx = backwards ? _findRanges.length - 1 : 0;
+  } else if (_findRanges.length) {
+    _findIdx = backwards
+      ? (_findIdx - 1 + _findRanges.length) % _findRanges.length
+      : (_findIdx + 1) % _findRanges.length;
+  }
+
+  if (!_findRanges.length) {
+    window.getSelection()?.removeAllRanges();
+    if ($.historyFindStatus) $.historyFindStatus.textContent = 'not found';
+    return;
+  }
+
+  // Highlight current match
+  const range = _findRanges[_findIdx];
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  // Scroll the matched node into view within #message-log
+  const node = range.startContainer;
+  const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+  el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+  if ($.historyFindStatus) {
+    $.historyFindStatus.textContent = `${_findIdx + 1} / ${_findRanges.length}`;
+  }
+}
+
+/** Walk text nodes inside #message-log and collect all case-insensitive match Ranges. */
+function buildFindRanges(query) {
+  if (!$.messageLog || !query) return [];
+  const ranges = [];
+  const q = query.toLowerCase();
+  const walker = document.createTreeWalker($.messageLog, NodeFilter.SHOW_TEXT, null);
+
+  let node;
+  while ((node = walker.nextNode())) {
+    const text = node.textContent.toLowerCase();
+    let start = 0;
+    let idx;
+    while ((idx = text.indexOf(q, start)) !== -1) {
+      const range = document.createRange();
+      range.setStart(node, idx);
+      range.setEnd(node, idx + q.length);
+      ranges.push(range);
+      start = idx + q.length;
+    }
+  }
+  return ranges;
 }
 
 // ── Rendering ───────────────────────────────────────────────
@@ -128,6 +279,12 @@ function renderHistoryList(entries) {
     frag.appendChild(createHistoryCard(entry));
   }
   $.historyList.appendChild(frag);
+
+  // Re-apply active state if a session is currently loaded
+  if (_activeId) {
+    const active = $.historyList.querySelector(`[data-session-id="${_activeId}"]`);
+    active?.classList.add('active');
+  }
 }
 
 function createHistoryCard(entry) {
@@ -161,6 +318,11 @@ function createHistoryCard(entry) {
 async function loadHistorySession(entry, cardEl) {
   if (_activeId === entry.session_id) return;
 
+  // Save scroll of previously loaded session
+  if (_activeId && $.messageLog) {
+    _scrollPos[_activeId] = $.messageLog.scrollTop;
+  }
+
   // Mark loading
   document.querySelectorAll('.history-card').forEach(c => c.classList.remove('active'));
   cardEl.classList.add('active', 'loading');
@@ -182,8 +344,11 @@ async function loadHistorySession(entry, cardEl) {
     }
     if ($.btnSend) $.btnSend.disabled = true;
 
-    // Render messages into the log
-    renderHistoryMessages(messages);
+    // Close find bar when switching sessions
+    hideHistoryFind();
+
+    // Render — new session load always goes to bottom (no saved position yet)
+    renderHistoryMessages(messages, /* restoreScroll= */ false);
 
   } catch (err) {
     console.error('[history] load failed:', err);
@@ -192,18 +357,25 @@ async function loadHistorySession(entry, cardEl) {
   }
 }
 
-function renderHistoryMessages(messages) {
+function renderHistoryMessages(messages, restoreScroll = false) {
   if (!$.messageLog || !_deps.createMsgEl) return;
   $.messageLog.innerHTML = '';
 
-  // Convert SessionHistoryMessage → internal msg format for createMsgEl
   const frag = document.createDocumentFragment();
   for (const m of messages) {
     const msg = convertMsg(m);
     if (msg) frag.appendChild(_deps.createMsgEl(msg));
   }
   $.messageLog.appendChild(frag);
-  $.messageLog.lastElementChild?.scrollIntoView({ block: 'end' });
+
+  // Restore scroll position or go to bottom
+  requestAnimationFrame(() => {
+    if (restoreScroll && _activeId && _scrollPos[_activeId] != null) {
+      $.messageLog.scrollTop = _scrollPos[_activeId];
+    } else {
+      $.messageLog.lastElementChild?.scrollIntoView({ block: 'end' });
+    }
+  });
 }
 
 function convertMsg(m) {
@@ -225,7 +397,7 @@ function convertMsg(m) {
   }
 }
 
-// ── Search ───────────────────────────────────────────────────
+// ── Sidebar search ───────────────────────────────────────────
 
 function filterHistory(query) {
   if (!query) {

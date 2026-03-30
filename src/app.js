@@ -21,7 +21,7 @@ import {
   moveSlashSelection, getSlashToken, getFlagToken,
   acceptActiveSlashItem, getSlashActiveIdx
 } from './slash-menu.js';
-import { setHistoryDeps, initHistory, scanHistory, exitHistoryView } from './history.js';
+import { setHistoryDeps, initHistory, scanHistory, exitHistoryView, isHistoryActive, showHistoryFind } from './history.js';
 
 const { invoke } = window.__TAURI__.core;
 
@@ -235,6 +235,14 @@ window.addEventListener('DOMContentLoaded', () => {
         s._restarting = true;
         spawnClaude(getActiveSessionId());
       }
+    }
+  });
+
+  // Cmd+F — find in history (only when a history session is loaded)
+  window.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && isHistoryActive()) {
+      e.preventDefault();
+      showHistoryFind();
     }
   });
 

@@ -37,6 +37,13 @@ export function initDOM() {
   $.historyView = document.getElementById('history-view');
   $.historyList = document.getElementById('history-list');
   $.historySearch = document.getElementById('history-search');
+  // History find bar
+  $.historyFind = document.getElementById('history-find');
+  $.historyFindInput = document.getElementById('history-find-input');
+  $.historyFindStatus = document.getElementById('history-find-status');
+  $.historyFindPrev = document.getElementById('history-find-prev');
+  $.historyFindNext = document.getElementById('history-find-next');
+  $.historyFindClose = document.getElementById('history-find-close');
 }
 
 export function esc(str) {

@@ -77,6 +77,15 @@
       <!-- Chat view -->
       <div id="chat-view">
 
+        <div id="history-find" class="hidden">
+          <input id="history-find-input" type="text" placeholder="search in session…"
+                 autocorrect="off" autocomplete="off" spellcheck="false" />
+          <span id="history-find-status"></span>
+          <button id="history-find-prev" title="Previous (Shift+Enter)">↑</button>
+          <button id="history-find-next" title="Next (Enter)">↓</button>
+          <button id="history-find-close" title="Close (Esc)">✕</button>
+        </div>
+
         <div id="message-log"></div>
 
         <div id="drop-indicator" class="hidden">drop files to attach</div>
