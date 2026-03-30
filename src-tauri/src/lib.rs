@@ -25,6 +25,49 @@ fn strip_frontmatter(content: &str) -> String {
     content.to_string()
 }
 
+/// Read a file as a base64-encoded string (for images/binary).
+#[tauri::command]
+fn read_file_as_base64(path: String) -> Result<String, String> {
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(encode_base64(&bytes))
+}
+
+/// Read a file as UTF-8 text.
+#[tauri::command]
+fn read_file_as_text(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+fn encode_base64(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    let mut iter = input.chunks_exact(3);
+    for chunk in iter.by_ref() {
+        let (b0, b1, b2) = (chunk[0] as usize, chunk[1] as usize, chunk[2] as usize);
+        out.push(TABLE[(b0 >> 2) & 0x3f] as char);
+        out.push(TABLE[((b0 << 4) | (b1 >> 4)) & 0x3f] as char);
+        out.push(TABLE[((b1 << 2) | (b2 >> 6)) & 0x3f] as char);
+        out.push(TABLE[b2 & 0x3f] as char);
+    }
+    match iter.remainder() {
+        [b0] => {
+            let b0 = *b0 as usize;
+            out.push(TABLE[(b0 >> 2) & 0x3f] as char);
+            out.push(TABLE[(b0 << 4) & 0x3f] as char);
+            out.push_str("==");
+        }
+        [b0, b1] => {
+            let (b0, b1) = (*b0 as usize, *b1 as usize);
+            out.push(TABLE[(b0 >> 2) & 0x3f] as char);
+            out.push(TABLE[((b0 << 4) | (b1 >> 4)) & 0x3f] as char);
+            out.push(TABLE[(b1 << 2) & 0x3f] as char);
+            out.push('=');
+        }
+        _ => {}
+    }
+    out
+}
+
 /// Read the full body of a slash command file by its frontmatter name.
 /// Scans ~/.claude/commands/ (one level of subdirs), matches by name: field,
 /// returns content with frontmatter stripped. Returns None if not found.
@@ -175,6 +218,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            read_file_as_base64,
+            read_file_as_text,
             read_slash_commands,
             read_slash_command_content,
             sync_omi_sessions,

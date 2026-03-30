@@ -1,6 +1,14 @@
 // ── File Attachments ─────────────────────────────────────
+//
+// Tauri v2 intercepts OS file drops before they reach the webview — HTML5
+// dragover/drop events DON'T fire for files from Finder. We use the Tauri
+// event system ('tauri://drag-drop') instead, plus Rust invoke commands
+// for reading file contents (shell allowlist doesn't include cat/base64).
 
 import { $, esc } from './dom.js';
+
+const { listen }  = window.__TAURI__.event;
+const { invoke }  = window.__TAURI__.core;
 
 // Per-session store: Map<sessionId, Attachment[]>
 // Attachment: { id, name, path, mimeType, data, isImage, status: 'staged'|'sent' }
@@ -10,10 +18,9 @@ let _getActiveSessionId = null;
 
 export function initAttachments({ getActiveSessionId }) {
   _getActiveSessionId = getActiveSessionId;
-  wireDragDrop();
+  wireDragDrop();   // async, fire-and-forget — listeners register in <5ms
   wireContextMenu();
   wireClearBtn();
-  // Re-render when active session changes
   document.addEventListener('pixel:session-changed', () => {
     renderAttachmentTokens();
     renderAttachmentPanel();
@@ -32,45 +39,51 @@ export function markAttachmentsSent(sessionId) {
   renderAttachmentPanel();
 }
 
-// ── File reading ─────────────────────────────────────────
+// ── MIME / extension helpers ──────────────────────────────
+
+const IMAGE_EXTS = new Set(['png','jpg','jpeg','gif','webp','bmp','svg','tiff','heic']);
+const MIME_MAP   = {
+  png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg',
+  gif:'image/gif', webp:'image/webp', bmp:'image/bmp',
+  svg:'image/svg+xml', tiff:'image/tiff', heic:'image/heic',
+};
 
 function guessMimeType(name) {
   const ext = (name.split('.').pop() || '').toLowerCase();
-  const map = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp' };
-  return map[ext] || 'text/plain';
+  return MIME_MAP[ext] || 'text/plain';
 }
 
-async function readFileData(file) {
-  const mimeType = file.type || guessMimeType(file.name);
-  const isImage = mimeType.startsWith('image/');
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('FileReader failed'));
+function isImagePath(path) {
+  const ext = (path.split('.').pop() || '').toLowerCase();
+  return IMAGE_EXTS.has(ext);
+}
+
+// ── Stage a file from its filesystem path (Tauri drop) ────
+
+async function stageFilePath(sessionId, path) {
+  const name = path.split('/').pop() || path;
+  const isImage = isImagePath(path);
+  const mimeType = guessMimeType(name);
+
+  let data;
+  try {
     if (isImage) {
-      reader.onload = () => {
-        const result = reader.result;
-        const b64 = result.includes(',') ? result.split(',')[1] : result;
-        resolve({ mimeType, data: b64, isImage: true });
-      };
-      reader.readAsDataURL(file);
+      data = await invoke('read_file_as_base64', { path });
     } else {
-      reader.onload = () => resolve({ mimeType, data: reader.result, isImage: false });
-      reader.readAsText(file);
+      data = await invoke('read_file_as_text', { path });
     }
-  });
-}
-
-async function stageFile(sessionId, file) {
-  let fileData;
-  try { fileData = await readFileData(file); } catch { return; }
+  } catch (err) {
+    console.error('[attachments] read failed:', name, err);
+    return;
+  }
 
   const att = {
     id: crypto.randomUUID(),
-    name: file.name,
-    path: file.path || '',  // Tauri provides .path on OS-dropped File objects
-    mimeType: fileData.mimeType,
-    data: fileData.data,
-    isImage: fileData.isImage,
+    name,
+    path,
+    mimeType,
+    data,
+    isImage,
     status: 'staged',
   };
   if (!store.has(sessionId)) store.set(sessionId, []);
@@ -80,53 +93,56 @@ async function stageFile(sessionId, file) {
 }
 
 // ── Drag & Drop ──────────────────────────────────────────
+// OS drops → Tauri events (tauri://drag-drop)
+// Panel re-drag → HTML5 events (internal only, not OS-level)
 
-function wireDragDrop() {
+async function wireDragDrop() {
   const el = $.chatView;
   const indicator = document.getElementById('drop-indicator');
 
-  el.addEventListener('dragenter', (e) => {
-    if (!e.dataTransfer?.types?.includes('Files')) return;
-    e.preventDefault();
+  const showIndicator = () => {
+    if (!_getActiveSessionId?.()) return;
     el.classList.add('drag-over');
     indicator?.classList.remove('hidden');
-  });
-
-  el.addEventListener('dragover', (e) => {
-    const hasFiles = e.dataTransfer?.types?.includes('Files');
-    const hasInternal = e.dataTransfer?.types?.includes('application/x-pixel-attachment');
-    if (!hasFiles && !hasInternal) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = hasInternal ? 'move' : 'copy';
-  });
-
-  el.addEventListener('dragleave', (e) => {
-    if (!el.contains(e.relatedTarget)) {
-      el.classList.remove('drag-over');
-      indicator?.classList.add('hidden');
-    }
-  });
-
-  el.addEventListener('drop', async (e) => {
-    e.preventDefault();
+  };
+  const hideIndicator = () => {
     el.classList.remove('drag-over');
     indicator?.classList.add('hidden');
+  };
+
+  // Tauri OS drag events ─────────────────────────────────
+  await listen('tauri://drag-enter', showIndicator);
+  await listen('tauri://drag-leave', hideIndicator);
+
+  await listen('tauri://drag-drop', async (event) => {
+    hideIndicator();
     const sessionId = _getActiveSessionId?.();
     if (!sessionId) return;
-
-    // Internal re-drag: re-stage a panel item
-    const internalId = e.dataTransfer.getData('application/x-pixel-attachment');
-    if (internalId) {
-      const att = (store.get(sessionId) || []).find(a => a.id === internalId);
-      if (att) att.status = 'staged';
-      renderAttachmentTokens();
-      renderAttachmentPanel();
-      return;
+    const paths = event.payload?.paths || [];
+    for (const path of paths) {
+      await stageFilePath(sessionId, path);
     }
+  });
 
-    // OS file drop
-    const files = [...(e.dataTransfer.files || [])];
-    for (const file of files) await stageFile(sessionId, file);
+  // HTML5 internal re-drag from attachment panel ─────────
+  // (Panel items set 'application/x-pixel-attachment' data — this is not an
+  // OS file drag, so HTML5 events do fire here.)
+  el.addEventListener('dragover', (e) => {
+    if (!e.dataTransfer?.types?.includes('application/x-pixel-attachment')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  });
+
+  el.addEventListener('drop', (e) => {
+    const internalId = e.dataTransfer?.getData('application/x-pixel-attachment');
+    if (!internalId) return;
+    e.preventDefault();
+    const sessionId = _getActiveSessionId?.();
+    if (!sessionId) return;
+    const att = (store.get(sessionId) || []).find(a => a.id === internalId);
+    if (att) att.status = 'staged';
+    renderAttachmentTokens();
+    renderAttachmentPanel();
   });
 }
 
@@ -230,11 +246,7 @@ function wireContextMenu() {
 
     if (action === 'reveal') {
       const p = _ctx.path;
-      if (p) {
-        window.__TAURI__.opener.revealItemInDir(p).catch(() => {
-          window.__TAURI__.shell.Command.create('open', ['-R', p]).execute().catch(() => {});
-        });
-      }
+      if (p) window.__TAURI__.opener.revealItemInDir(p).catch(console.error);
     } else if (action === 'reattach' && sid) {
       const att = (store.get(sid) || []).find(a => a.id === _ctx.attachmentId);
       if (att) att.status = 'staged';
@@ -259,12 +271,8 @@ function wireClearBtn() {
   document.getElementById('btn-clear-attachments')?.addEventListener('click', () => {
     const sid = _getActiveSessionId?.();
     if (!sid) return;
-    // Only clear sent items; leave staged in place
     const atts = store.get(sid);
-    if (atts) {
-      const remaining = atts.filter(a => a.status === 'staged');
-      store.set(sid, remaining);
-    }
+    if (atts) store.set(sid, atts.filter(a => a.status === 'staged'));
     renderAttachmentPanel();
   });
 }
