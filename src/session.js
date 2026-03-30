@@ -49,13 +49,32 @@ const SPRITE_DATA = {
 
 const ANIMALS = ['cat2', 'snake', 'penguin', 'octopus-pink', 'crab', 'rat', 'seal', 'rabbit', 'cat', 'octopus', 'octopus-yellow', 'octopus-green', 'cat-120', 'rabbit-120', 'penguin-120', 'crab-120', 'rat-120', 'seal-120', 'snake-120', 'cat2-120', 'cat-195', 'rabbit-195', 'penguin-195', 'crab-195', 'rat-195', 'seal-195', 'snake-195', 'cat2-195', 'cat-270', 'rabbit-270', 'penguin-270', 'crab-270', 'rat-270', 'seal-270', 'snake-270', 'cat2-270'];
 const IDENTITY_SEQ_KEY = 'pixel-terminal-identity-seq-v8';
+// First BASE_ANIMAL_COUNT entries in ANIMALS are 0-degree originals; rest are hue-rotated.
+const BASE_ANIMAL_COUNT = 12;
+
+function _shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 function getNextIdentity() {
-  // Cycles through all 9 animals in order before repeating.
-  // No hue rotation — sprites use their original pixel-art color palettes only.
-  const store = JSON.parse(localStorage.getItem(IDENTITY_SEQ_KEY) || '{"idx":0}');
-  const animalIndex = store.idx % ANIMALS.length;
-  store.idx = store.idx + 1;
+  // Each full cycle: all BASE_ANIMAL_COUNT original-color animals (shuffled) come first,
+  // then all hue-rotated animals (shuffled). Regenerates on first run and after exhaustion.
+  const store = JSON.parse(localStorage.getItem(IDENTITY_SEQ_KEY) || '{"idx":0,"seq":null}');
+
+  if (!store.seq || store.idx >= ANIMALS.length) {
+    const base = _shuffle(Array.from({ length: BASE_ANIMAL_COUNT }, (_, i) => i));
+    const hue  = _shuffle(Array.from({ length: ANIMALS.length - BASE_ANIMAL_COUNT }, (_, i) => BASE_ANIMAL_COUNT + i));
+    store.seq = [...base, ...hue];
+    store.idx = 0;
+  }
+
+  const animalIndex = store.seq[store.idx];
+  store.idx++;
   localStorage.setItem(IDENTITY_SEQ_KEY, JSON.stringify(store));
   return { animalIndex };
 }
@@ -72,11 +91,11 @@ class SpriteRenderer {
     const animal = ANIMALS[charIndex % ANIMALS.length];
     const data = SPRITE_DATA[animal];
 
-    el.style.width = '40px';
-    el.style.height = '40px';
+    el.style.width = '48px';
+    el.style.height = '48px';
     el.style.flexShrink = '0';
     el.style.backgroundImage = "url('" + data + "')";
-    el.style.backgroundSize = '160px 40px';
+    el.style.backgroundSize = '192px 48px';
     el.style.backgroundRepeat = 'no-repeat';
     el.style.backgroundPosition = '0 0';
     el.style.imageRendering = 'pixelated';
@@ -107,7 +126,7 @@ class SpriteRenderer {
       this._raf = requestAnimationFrame(loop);
       if (ts - this._lastTs >= 1000 / this._FPS) {
         this._frameIdx = (this._frameIdx + 1) % 4;
-        this.el.style.backgroundPosition = (-this._frameIdx * 40) + 'px 0';
+        this.el.style.backgroundPosition = (-this._frameIdx * 48) + 'px 0';
         this._lastTs = ts;
       }
     };
