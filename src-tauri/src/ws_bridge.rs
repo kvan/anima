@@ -266,6 +266,14 @@ pub async fn switch_voice_source(
     Ok(())
 }
 
+/// Tauri command: check if any voice client is connected (called on frontend load).
+#[tauri::command]
+pub async fn get_voice_status(
+    state: tauri::State<'_, OmiBridgeState>,
+) -> Result<bool, String> {
+    Ok(state.voice_ready_count.load(Ordering::SeqCst) > 0)
+}
+
 /// Tauri command: called from app.js when the user toggles the Omi listen switch.
 /// Stores mute state and broadcasts mute/unmute to ALL connected clients.
 #[tauri::command]

@@ -8,7 +8,7 @@ use tauri::{
 };
 
 mod ws_bridge;
-use ws_bridge::{ptt_release, ptt_start, set_omi_listening, set_voice_mode, switch_voice_source, sync_omi_sessions};
+use ws_bridge::{get_voice_status, ptt_release, ptt_start, set_omi_listening, set_voice_mode, switch_voice_source, sync_omi_sessions};
 
 #[derive(serde::Serialize)]
 struct SlashCommand {
@@ -569,6 +569,7 @@ pub fn run() {
             ptt_start,
             ptt_release,
             switch_voice_source,
+            get_voice_status,
             scan_session_history,
             load_session_history,
             send_signal,

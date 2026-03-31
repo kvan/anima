@@ -36,7 +36,7 @@ function appendVoiceLog(text, ts, dispatched) {
   if (!$.voiceLog || !text) return;
   const entry = document.createElement('div');
   entry.className = 'voice-entry' + (dispatched ? ' dispatched' : '');
-  entry.innerHTML = `<span class="ts">${escapeHtml(ts || '')}</span>${dispatched ? '\u25b6 ' : ''}${escapeHtml(text)}`;
+  entry.innerHTML = `<span class="ts">${escapeHtml(ts || '')}</span>${dispatched ? ': ' : ''}${escapeHtml(text)}`;
   $.voiceLog.appendChild(entry);
   while ($.voiceLog.children.length > MAX_VOICE_LOG) $.voiceLog.removeChild($.voiceLog.firstChild);
   $.voiceLog.scrollTop = $.voiceLog.scrollHeight;
@@ -133,16 +133,25 @@ function resolveSession(ref) {
 
 // ── Init (called once from bootstrap) ──────────────────────
 export function initVoice() {
-  // Omi indicator click
+  // Check if voice bridge is already connected (handles page reload)
+  invoke('get_voice_status').then(connected => {
+    if (connected) {
+      omiConnected = true;
+      _omiIndicatorUpdate();
+    }
+  }).catch(() => {});
+
+  // Omi indicator click — launch voice bridge if not connected
   $.omiIndicator?.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (omiConnected) {
       _showDotStatus('Voice bridge connected');
     } else {
+      _showDotStatus('Starting mic…');
       const home = await window.__TAURI__.path.homeDir();
-      const script = `${home}Projects/pixel-terminal/launch.command`;
-      Command.create('open', [script]).execute().catch(() => {
-        _showDotStatus('Run launch.command to connect');
+      const bridgeCmd = `cd ${home}Projects/OmiWebhook && source venv/bin/activate && python3 pixel_voice_bridge.py`;
+      Command.create('sh', ['-c', bridgeCmd]).execute().catch(() => {
+        _showDotStatus('Could not start voice bridge');
       });
     }
   });
