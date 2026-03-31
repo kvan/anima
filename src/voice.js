@@ -13,7 +13,7 @@ const { listen: tauriListen } = window.__TAURI__.event;
 // ── State ──────────────────────────────────────────────────
 let omiConnected = false;
 let omiListening = true; // always start listening
-let voiceSource = localStorage.getItem('voiceSource') || 'ble';
+let voiceSource = localStorage.getItem('voiceSource') || 'mic';
 let alwaysOn = false;
 let pttActive = false;
 let settingsOpen = false;

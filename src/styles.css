@@ -742,7 +742,7 @@ canvas.sprite-canvas {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #f5c542;              /* yellow = disconnected */
+  background: #555;                    /* gray = no mic connected */
   display: inline-block;
   flex-shrink: 0;
   align-self: center;
@@ -754,7 +754,7 @@ canvas.sprite-canvas {
   cursor: pointer;
 }
 #omi-indicator.connected {
-  background: #4fa3ff;              /* blue = connected, fn not held */
+  background: #4fa3ff;              /* blue = mic/ble connected */
 }
 
 /* ── Always-on mic toggle ─── */
@@ -850,16 +850,17 @@ canvas.sprite-canvas {
   letter-spacing: 0.05em;
   color: var(--text-mute);
   background: transparent;
-  border: 1px solid currentColor;
+  border: 1px solid var(--text-mute);
   border-radius: 2px;
   padding: 1px 5px;
   cursor: pointer;
   opacity: 0.5;
-  transition: color 0.2s, opacity 0.2s;
+  transition: color 0.2s, opacity 0.2s, border-color 0.2s;
 }
 .source-btn:hover { opacity: 0.8; }
 .source-btn.active {
-  color: var(--active-green);
+  color: var(--text);
+  border-color: var(--text);
   opacity: 1;
 }
 
@@ -1083,7 +1084,7 @@ canvas.sprite-canvas {
 
 body.no-session-active #btn-new-session {
   color: var(--logo-orange);
-  border-color: var(--logo-orange);
+  opacity: 1;
   background: transparent;
 }
 body.no-session-active #btn-new-session.plus-inverted {

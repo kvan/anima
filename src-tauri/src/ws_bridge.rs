@@ -10,7 +10,7 @@
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::net::TcpListener;
@@ -23,6 +23,7 @@ const WS_PORT: u16 = 9876;
 /// plus the current mute and always-on flags.
 pub struct OmiBridgeState {
     pub ws_clients: Mutex<Vec<mpsc::UnboundedSender<String>>>,
+    pub voice_ready_count: AtomicU32,
     pub muted: Arc<AtomicBool>,
     pub always_on: Arc<AtomicBool>,
 }
@@ -41,6 +42,7 @@ pub fn init<R: tauri::Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn st
     let always_on = Arc::new(AtomicBool::new(false));
     app.manage(OmiBridgeState {
         ws_clients: Mutex::new(Vec::new()),
+        voice_ready_count: AtomicU32::new(0),
         muted,
         always_on,
     });
@@ -117,12 +119,14 @@ async fn handle_client<R: tauri::Runtime>(
             let _ = tx.send(ao_msg.to_string());
         }
 
-        // Always emit omi:connected — JS may have missed the first event due to
-        // a race between the WS server binding and the webview listener registering.
-        // omiConnected = true in app.js is idempotent.
-        let _ = app.emit("omi:connected", ());
+        // Don't emit omi:connected here — wait for voice_ready message from
+        // clients that actually provide audio input (mic/BLE bridge).
+        // Cloud relays (pixel_bridge.py) connect but never send voice_ready.
         let _ = was_empty; // suppress unused variable warning
     }
+
+    // Track whether this client has reported voice input is active.
+    let mut is_voice = false;
 
     // Write task: drain channel → WS sink
     let write_task = tauri::async_runtime::spawn(async move {
@@ -134,11 +138,36 @@ async fn handle_client<R: tauri::Runtime>(
     });
 
     // Read loop: incoming JSON → Tauri event "omi:command"
+    // voice_ready/voice_lost are intercepted to control the omi indicator dot.
     while let Some(result) = read.next().await {
         match result {
             Ok(Message::Text(text)) => {
                 if let Ok(val) = serde_json::from_str::<Value>(&text) {
-                    let _ = app.emit("omi:command", val);
+                    match val.get("type").and_then(|t| t.as_str()) {
+                        Some("voice_ready") => {
+                            if !is_voice {
+                                is_voice = true;
+                                let state = app.state::<OmiBridgeState>();
+                                if state.voice_ready_count.fetch_add(1, Ordering::SeqCst) == 0 {
+                                    let _ = app.emit("omi:connected", ());
+                                }
+                                eprintln!("[omi-bridge] Client {peer} voice_ready");
+                            }
+                        }
+                        Some("voice_lost") => {
+                            if is_voice {
+                                is_voice = false;
+                                let state = app.state::<OmiBridgeState>();
+                                if state.voice_ready_count.fetch_sub(1, Ordering::SeqCst) == 1 {
+                                    let _ = app.emit("omi:disconnected", ());
+                                }
+                                eprintln!("[omi-bridge] Client {peer} voice_lost");
+                            }
+                        }
+                        _ => {
+                            let _ = app.emit("omi:command", val);
+                        }
+                    }
                 }
             }
             Ok(Message::Close(_)) | Err(_) => break,
@@ -153,8 +182,15 @@ async fn handle_client<R: tauri::Runtime>(
     let _ = write_task.await; // drive task to completion so rx is dropped
     drop(tx);                  // drop our local clone too
 
-    // Hold a single lock across retain() + len() to avoid TOCTOU where another
-    // client connects between the two operations and suppresses omi:disconnected.
+    // If this client was voice-ready, decrement counter and possibly emit disconnected.
+    if is_voice {
+        let state = app.state::<OmiBridgeState>();
+        if state.voice_ready_count.fetch_sub(1, Ordering::SeqCst) == 1 {
+            let _ = app.emit("omi:disconnected", ());
+        }
+    }
+
+    // Clean up the client list.
     {
         let state = app.state::<OmiBridgeState>();
         let mut clients = state.ws_clients.lock().await;
@@ -162,9 +198,6 @@ async fn handle_client<R: tauri::Runtime>(
         let remaining = clients.len();
         drop(clients);
         eprintln!("[omi-bridge] Client {peer} disconnected ({remaining} remaining)");
-        if remaining == 0 {
-            let _ = app.emit("omi:disconnected", ());
-        }
     }
 }
 
