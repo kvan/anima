@@ -247,6 +247,18 @@ async function pickFolder() {
     } else {
       await createSession(dir);
     }
+    // Guard: macOS dialog focus restoration can fire spurious click events
+    // on the adjacent HISTORY tab button, switching back to history view.
+    // Re-assert LIVE tab after pending events settle.
+    setTimeout(() => {
+      if (sessions.size > 0) {
+        document.getElementById('session-list')?.classList.remove('hidden');
+        document.getElementById('history-view')?.classList.add('hidden');
+        document.querySelectorAll('.session-tab').forEach(b => {
+          b.classList.toggle('active', b.dataset.tab === 'live');
+        });
+      }
+    }, 50);
   } catch (err) {
     console.error('Folder picker error:', err);
   }

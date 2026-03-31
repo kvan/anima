@@ -2,9 +2,8 @@
 // Browse, search, and view past Claude Code sessions from JSONL files.
 // Read-only. Reuses createMsgEl() from messages.js for rendering.
 
-import { $ } from './dom.js';
-
-const { invoke } = window.__TAURI__.core;
+import { $, esc } from './dom.js';
+import { SpriteRenderer, formatTokens } from './session.js';
 
 // DI — set by app.js via setHistoryDeps()
 let _deps = {
@@ -27,6 +26,7 @@ let _scrollPos = {};     // session_id → scrollTop (persist across tab switche
 let _scannedCwd = null;  // cwd last scanned (to avoid duplicate scans)
 let _searchTimer = null;
 let _findOpen = false;
+let _tabHandlerRegistered = false;
 // In-log find state
 let _findRanges = [];    // Range[] — all matches within #message-log
 let _findIdx = -1;       // currently highlighted match index
@@ -37,14 +37,20 @@ export function isHistoryActive() { return _activeId !== null; }
 // ── Public API ──────────────────────────────────────────────
 
 export function initHistory() {
-  // Tab click handlers
-  document.querySelectorAll('.session-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tab = btn.dataset.tab;
-      if (tab === 'hist') showHistoryTab();
-      else showLiveTab();
-    });
-  });
+  // Tab click — single delegated handler on container (idempotent)
+  if (!_tabHandlerRegistered) {
+    _tabHandlerRegistered = true;
+    const tabContainer = document.getElementById('session-tabs');
+    if (tabContainer) {
+      tabContainer.addEventListener('click', (e) => {
+        const btn = e.target.closest('.session-tab');
+        if (!btn) return;
+        const tab = btn.dataset.tab;
+        if (tab === 'hist') showHistoryTab();
+        else showLiveTab();
+      });
+    }
+  }
 
   // Sidebar search input
   if ($.historySearch) {
@@ -103,10 +109,58 @@ export function showHistoryTab() {
   $.sessionList?.classList.add('hidden');
   $.historyView?.classList.remove('hidden');
 
+  // Show the active live session card at the top of the history view
+  showLiveSessionPin();
+
+  // Re-render list so pinned card reflects current active state
+  renderHistoryList(_filtered);
+
   // If a history session was loaded before, restore it with saved scroll position
   if (_activeId && _cachedMsgs[_activeId]) {
     renderHistoryMessages(_cachedMsgs[_activeId], /* restoreScroll= */ true);
   }
+}
+
+// Sprite renderer for the live session pin (destroyed on exit)
+let _livePinRenderer = null;
+
+/** Render the active live session's card at the top of #history-current. */
+function showLiveSessionPin() {
+  if (!$.historyCurrent) return;
+  const activeId = _deps.getActiveSessionId?.();
+  const s = activeId ? _deps.sessions?.get(activeId) : null;
+  if (!s) {
+    $.historyCurrent.innerHTML = '';
+    $.historyCurrent.classList.add('hidden');
+    return;
+  }
+
+  // Clean up previous sprite renderer
+  _livePinRenderer?.destroy();
+  _livePinRenderer = null;
+
+  $.historyCurrent.innerHTML = '';
+
+  const card = document.createElement('div');
+  card.className = 'session-card active';
+  card.style.cursor = 'pointer';
+  card.innerHTML = `
+    <div class="session-card-top">
+      <div class="sprite-wrap" id="history-live-sprite"></div>
+      <div class="session-card-info">
+        <div class="session-card-name">${esc(s.name)}</div>
+        <div class="session-card-tokens">${formatTokens(s.tokens + (s._liveTokens || 0))}</div>
+      </div>
+      <span class="card-badge working">LIVE</span>
+    </div>
+  `;
+  card.addEventListener('click', () => showLiveTab());
+  $.historyCurrent.appendChild(card);
+  $.historyCurrent.classList.remove('hidden');
+
+  // Attach sprite renderer
+  const wrap = document.getElementById('history-live-sprite');
+  if (wrap) _livePinRenderer = new SpriteRenderer(wrap, s.charIndex);
 }
 
 export function showLiveTab() {
@@ -135,29 +189,38 @@ export function showLiveTab() {
     $.inputField.placeholder = 'Message Claude Code...';
   }
   if ($.btnSend) $.btnSend.disabled = false;
+
+  // Clean up live pin sprite renderer
+  _livePinRenderer?.destroy();
+  _livePinRenderer = null;
 }
 
 /** Called when user clicks a live session card — fully exits history mode. */
 export function exitHistoryView() {
-  if (!_activeId) return;
+  // Clean up loaded history session state (only when a session was actually loaded)
+  if (_activeId) {
+    if ($.messageLog) _scrollPos[_activeId] = $.messageLog.scrollTop;
+    _activeId = null;
 
-  // Save scroll before clearing
-  if ($.messageLog) _scrollPos[_activeId] = $.messageLog.scrollTop;
-  _activeId = null;
+    hideHistoryFind();
 
-  hideHistoryFind();
+    if ($.inputField) {
+      $.inputField.disabled = false;
+      $.inputField.placeholder = 'Message Claude Code...';
+    }
+    if ($.btnSend) $.btnSend.disabled = false;
 
-  // Re-enable input
-  if ($.inputField) {
-    $.inputField.disabled = false;
-    $.inputField.placeholder = 'Message Claude Code...';
+    document.querySelectorAll('.history-card').forEach(c => c.classList.remove('active'));
   }
-  if ($.btnSend) $.btnSend.disabled = false;
 
-  // Remove active highlight from history cards
-  document.querySelectorAll('.history-card').forEach(c => c.classList.remove('active'));
+  // Always clear #history-current (live pin or viewed session) and switch to LIVE tab
+  if ($.historyCurrent) {
+    $.historyCurrent.innerHTML = '';
+    $.historyCurrent.classList.add('hidden');
+  }
+  _livePinRenderer?.destroy();
+  _livePinRenderer = null;
 
-  // Switch sidebar to LIVE tab
   document.querySelectorAll('.session-tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === 'live');
   });
@@ -276,15 +339,29 @@ function renderHistoryList(entries) {
 
   const frag = document.createDocumentFragment();
   for (const entry of entries) {
-    frag.appendChild(createHistoryCard(entry));
+    const card = createHistoryCard(entry);
+    if (entry.session_id === _activeId) card.classList.add('active');
+    frag.appendChild(card);
   }
   $.historyList.appendChild(frag);
+}
 
-  // Re-apply active state if a session is currently loaded
-  if (_activeId) {
-    const active = $.historyList.querySelector(`[data-session-id="${_activeId}"]`);
-    active?.classList.add('active');
-  }
+/** Show the currently-viewed history session in the stable #history-current element.
+ *  This element is separate from #history-list so renderHistoryList never wipes it. */
+function showCurrentHistoryCard(entry) {
+  if (!$.historyCurrent) return;
+  $.historyCurrent.innerHTML = '';
+
+  const label = document.createElement('div');
+  label.className = 'history-pin-label';
+  label.textContent = 'VIEWING';
+
+  const card = createHistoryCard(entry);
+  card.classList.add('active', 'pinned');
+  card.prepend(label);
+
+  $.historyCurrent.appendChild(card);
+  $.historyCurrent.classList.remove('hidden');
 }
 
 function createHistoryCard(entry) {
@@ -335,7 +412,9 @@ async function loadHistorySession(entry, cardEl) {
     }
 
     _activeId = entry.session_id;
-    cardEl.classList.remove('loading');
+
+    // Show in stable #history-current element (survives list re-renders)
+    showCurrentHistoryCard(entry);
 
     // Disable input
     if ($.inputField) {

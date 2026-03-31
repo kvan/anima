@@ -1,5 +1,6 @@
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+extern crate libc;
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -461,6 +462,24 @@ async fn load_session_history(file_path: String) -> Result<Vec<SessionHistoryMes
     .map_err(|e| e.to_string())?
 }
 
+/// Send a POSIX signal to a process by PID. Used to send SIGINT (2) to Claude
+/// Code to cancel the current turn without killing the process.
+#[tauri::command]
+fn send_signal(pid: u32, signal: i32) -> Result<(), String> {
+    let ret = unsafe { libc::kill(pid as i32, signal) };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(format!("kill({}, {}) failed: errno {}", pid, signal, unsafe { *libc::__error() }))
+    }
+}
+
+/// Forward JS console.log to terminal for debugging.
+#[tauri::command]
+fn js_log(msg: String) {
+    println!("[webview] {}", msg);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -523,7 +542,9 @@ pub fn run() {
             ptt_release,
             switch_voice_source,
             scan_session_history,
-            load_session_history
+            load_session_history,
+            send_signal,
+            js_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

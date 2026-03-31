@@ -39,7 +39,6 @@ export function renderSessionCard(id) {
   });
   $.sessionList.appendChild(card);
 
-  // Attach sprite renderer to the wrap div
   const wrap = document.getElementById(`card-sprite-wrap-${id}`);
   spriteRenderers.set(id, new SpriteRenderer(wrap, s.charIndex));
 }
@@ -86,6 +85,7 @@ export function setActiveSession(id) {
   const s = sessions.get(id);
   if (s) updateWorkingCursor(s.status);
   document.body.classList.remove('no-session-active');
+  $.sessionPrompt?.classList.add('hidden');
   $.inputField?.focus();
   syncOmiSessions();
   document.dispatchEvent(new CustomEvent('pixel:session-changed', { detail: { id } }));
@@ -94,6 +94,7 @@ export function setActiveSession(id) {
 export function showEmptyState() {
   $.messageLog.querySelectorAll('.msg, .working-cursor, .msg-new').forEach(el => el.remove());
   document.body.classList.add('no-session-active');
+  $.sessionPrompt?.classList.remove('hidden');
 }
 
 export function showChatView() {
