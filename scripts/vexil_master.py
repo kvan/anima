@@ -275,6 +275,9 @@ def main() -> None:
     # turn_complete events seen this batch: {session_id: tool_count}
     turn_complete_this_batch: Dict[str, int] = {}
 
+    # Last 3 physical actions Vexil used — injected into prompt to prevent repetition
+    recent_actions: collections.deque = collections.deque(maxlen=3)
+
     # ── Cross-session memory lint state ───────────────────────────────────────
     # id → [(session_id, ts)] — detect same ID written in 2+ sessions within 60s
     memory_id_writes: Dict[str, list] = {}
@@ -592,6 +595,11 @@ def main() -> None:
         else:
             continue
 
+        # ── Inject recent actions to prevent repetition ──────────────────────
+        if recent_actions:
+            avoid = ', '.join(f'"{a}"' for a in recent_actions)
+            prompt = prompt + f'\n\nDo not use these physical actions (already used recently): {avoid}.'
+
         # ── Prepend file context (full loaf, not breadcrumbs) ────────────────
         try:
             file_ctx = _collect_file_excerpts(recent_activity, now, ACTIVITY_RECENCY_WINDOW)
@@ -611,6 +619,11 @@ def main() -> None:
                 print(f'[vexil-master] suppressed internal ref (user mode): "{msg[:80]}"')
             else:
                 append_out(msg)
+                # Parse and store the physical action for next-call dedup
+                import re as _re
+                m = _re.search(r'\*([^*]+)\*', msg)
+                if m:
+                    recent_actions.append(m.group(1).strip())
             last_comment_ts = now
             tools_since_comment = 0
             print(f'[vexil-master] {trigger} → "{msg[:80]}"', flush=True)
