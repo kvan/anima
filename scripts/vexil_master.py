@@ -207,7 +207,7 @@ def _is_internal(msg: str) -> bool:
     return any(term.lower() in lower for term in _INTERNAL_TERMS)
 
 
-def _read_file_context(file_path: Optional[str], cwd: Optional[str], max_lines: int = 60) -> Optional[str]:
+def _read_file_context(file_path: Optional[str], cwd: Optional[str], max_lines: int = 100) -> Optional[str]:
     """Read up to max_lines from file_path. Returns None if unreadable or unsafe."""
     if not file_path:
         return None
@@ -362,7 +362,11 @@ def main() -> None:
             elif etype == 'turn_complete':
                 tool_count = entry.get('tool_count', 0)
                 if tool_count > 0:
-                    turn_complete_this_batch[sid] = tool_count
+                    turn_complete_this_batch[sid] = {
+                        'tc':        tool_count,
+                        'turn_text': entry.get('turn_text', ''),
+                        'user_msg':  entry.get('user_msg', ''),
+                    }
 
             elif etype == 'tool_any':
                 # Lightweight counter-only event — all tools including MCP/internal.
@@ -411,7 +415,7 @@ def main() -> None:
         # Fires once per completed turn if the session did real work (tool_count > 0).
         # Uses per-session cooldown (20s) not global, so 2 active sessions both comment.
         if trigger is None and turn_complete_this_batch:
-            for tc_sid, tc_count in turn_complete_this_batch.items():
+            for tc_sid, tc_data in turn_complete_this_batch.items():
                 since_last = now - last_comment_per_session.get(tc_sid, 0)
                 if since_last >= TURN_COOLDOWN:
                     acts = recent_activity.get(tc_sid, [])
@@ -420,8 +424,10 @@ def main() -> None:
                         trigger = 'turn_complete'
                         trigger_data = {
                             'session_id': tc_sid,
-                            'tool_count': tc_count,
-                            'activity': recent[-4:],
+                            'tool_count': tc_data['tc'],
+                            'activity':   recent[-4:],
+                            'turn_text':  tc_data.get('turn_text', ''),
+                            'user_msg':   tc_data.get('user_msg', ''),
                         }
                         last_comment_per_session[tc_sid] = now
                         break
@@ -504,17 +510,28 @@ def main() -> None:
 
         # ── Build Gemini prompt ───────────────────────────────────────────────
         if trigger == 'turn_complete':
-            sid = trigger_data['session_id']
-            tc = trigger_data['tool_count']
-            acts = trigger_data['activity']
-            steps = ' → '.join(f"{t}({h})" if h else t for t, h in acts)
-            prompt = (
-                f"Tool sequence: {steps} ({tc} tools). "
-                f"If there's a visible execution problem in this sequence — a retry, a stall, "
-                f"an inefficiency — name it in one line. "
-                f"Do not question the user's project goals or tool choices. "
-                f"If the sequence looks intentional and clean, return empty string."
-            )
+            sid       = trigger_data['session_id']
+            tc        = trigger_data['tool_count']
+            acts      = trigger_data['activity']
+            turn_text = trigger_data.get('turn_text', '')
+            user_msg  = trigger_data.get('user_msg', '')
+            steps     = ' → '.join(f"{t}({h})" if h else t for t, h in acts)
+            if turn_text:
+                prompt = (
+                    f"User: {user_msg}\n"
+                    f"Assistant concluded: {turn_text}\n"
+                    f"Tools: {steps} ({tc} tools).\n"
+                    f"If there's a genuine execution problem or sharp insight visible here, "
+                    f"name it in one line. Do not question the user's project goals. "
+                    f"Return empty string if the work looks clean and intentional."
+                )
+            else:
+                prompt = (
+                    f"Tool sequence: {steps} ({tc} tools). "
+                    f"If there's a visible execution problem — a retry, a stall, an inefficiency — "
+                    f"name it in one line. Do not question the user's project goals. "
+                    f"Return empty string if the sequence looks clean."
+                )
 
         elif trigger == 'retry_loop':
             tool = short_name(trigger_data['tool'])

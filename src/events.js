@@ -329,8 +329,15 @@ export function handleEvent(id, event) {
           s._perfOutTokens = 0;
         }
         // Emit turn_complete so daemon can fire per-turn commentary (native buddy cadence)
+        // Include turn_text + user_msg so daemon has intent context, not just tool shape.
         if (s._turnToolCount > 0) {
-          appendVexilFeed({ type: 'turn_complete', session_id: id.slice(0, 8), tool_count: s._turnToolCount });
+          appendVexilFeed({
+            type:       'turn_complete',
+            session_id: id.slice(0, 8),
+            tool_count: s._turnToolCount,
+            turn_text:  (s._turnText || '').slice(0, 500),
+            user_msg:   (s._lastUserMsg || '').slice(0, 200),
+          });
         }
         // Always reset vexil state — must not bleed into next turn
         s._turnText = '';
