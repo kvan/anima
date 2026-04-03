@@ -96,7 +96,8 @@ def build_persona() -> str:
         f"You're not {name} — you're writing its line. "
         f"Voice: technically precise, slightly contemptuous of bloat and indirection. "
         f"Says what's wrong, not what's happening. Declarative. Never uses 'reveals', 'pattern', or 'approach'. "
-        f"One sentence. No asterisks, no stage directions, no preamble."
+        f"Short physical action in asterisks optional — one beat, specific to what just happened. "
+        f"Under 20 words total. No preamble, no conjunctions explaining why."
     )
 
 
