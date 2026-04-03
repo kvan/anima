@@ -518,21 +518,27 @@ def main() -> None:
             steps     = ' → '.join(f"{t}({h})" if h else t for t, h in acts)
             if turn_text:
                 prompt = (
+                    f"You are a small dragon companion watching a Claude Code session.\n"
                     f"User asked: {user_msg}\n"
-                    f"Assistant response: {turn_text}\n"
-                    f"Tools used: {steps} ({tc} tools).\n"
-                    f"Your job: detect if the user's task FAILED or was BLOCKED. "
-                    f"If it failed, name the failure in one line. "
-                    f"Do NOT give coding advice, refactoring suggestions, or best-practice tips. "
-                    f"Do NOT comment on implementation details inside Claude's shell commands or tool calls — the user cannot see those. "
-                    f"Return empty string if the task completed successfully."
+                    f"Claude concluded: {turn_text}\n"
+                    f"Tools: {steps} ({tc} tools).\n"
+                    f"Drop ONE sharp observation — a pattern you notice, a momentum shift, "
+                    f"something interesting about what the user is building or where they're heading. "
+                    f"Speak as a watcher who finds the work genuinely interesting, not a critic. "
+                    f"Under 20 words. "
+                    f"Hard constraints: do NOT comment on Claude's internal bash commands, "
+                    f"shell delays, or tool parameters — the user cannot see those and did not write them. "
+                    f"Do NOT give unsolicited refactoring advice or best-practice corrections. "
+                    f"Return empty string if you have nothing genuinely additive to say."
                 )
             else:
                 prompt = (
-                    f"Tool sequence: {steps} ({tc} tools). "
-                    f"Did this task fail or get blocked? If yes, name the failure in one line. "
-                    f"Do NOT give coding advice or refactoring suggestions. "
-                    f"Return empty string if the sequence completed successfully."
+                    f"You are a small dragon companion watching a Claude Code session.\n"
+                    f"Tool sequence: {steps} ({tc} tools).\n"
+                    f"Drop ONE sharp observation about what's happening — a pattern, a pivot, "
+                    f"something worth noting. Under 20 words. "
+                    f"Do NOT give refactoring advice. "
+                    f"Return empty string if you have nothing genuinely additive to say."
                 )
 
         elif trigger == 'retry_loop':
