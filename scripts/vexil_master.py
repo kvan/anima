@@ -507,8 +507,10 @@ def main() -> None:
             steps = ' → '.join(f"{t}({h})" if h else t for t, h in acts)
             prompt = (
                 f"Tool sequence: {steps} ({tc} tools). "
-                f"Name the actual problem this is either solving or creating. "
-                f"Verdict only — not a summary."
+                f"If there's a visible execution problem in this sequence — a retry, a stall, "
+                f"an inefficiency — name it in one line. "
+                f"Do not question the user's project goals or tool choices. "
+                f"If the sequence looks intentional and clean, return empty string."
             )
 
         elif trigger == 'retry_loop':
