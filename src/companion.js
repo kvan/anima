@@ -354,13 +354,9 @@ async function pollLintFile() {
   addToLintLog(state, msg);
   invoke('js_log', { msg: `[vexil-lint] state:${state} "${msg?.slice(0, 80)}"` }).catch(() => {});
 
-  if (state === 'blocked') {
-    enqueueBubble({ msg, type: 'blocked', interactive: false });
-  } else if (state === 'needs_approval') {
+  if (state === 'needs_approval') {
     _approvalPending = true;
     enqueueBubble({ msg, type: 'ask', interactive: true });
-  } else if (state === 'warn') {
-    enqueueBubble({ msg, type: 'warn', interactive: false });
   } else if (state === 'approved' || state === 'denied' || state === 'timeout_pass') {
     // Terminal states — allow bubble to auto-dismiss
     hideBubble();

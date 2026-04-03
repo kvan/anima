@@ -84,20 +84,33 @@ def load_buddy() -> dict:
         return {'name': 'Vexil', 'species': 'dragon'}
 
 
+def load_claude_companion() -> dict:
+    """Read the official companion soul from ~/.claude.json (name + personality)."""
+    try:
+        claude_path = Path.home() / '.claude.json'
+        data = json.loads(claude_path.read_text())
+        return data.get('companion', {})
+    except Exception:
+        return {}
+
+
 def build_persona() -> str:
-    buddy = load_buddy()
-    name    = buddy.get('name', 'Vexil')
-    species = buddy.get('species', 'duck')
-    # Official prompt.ts pattern: watcher framing, not roleplay framing.
-    # "You're not {name}" = voice acting, not method acting = personality without asterisks.
+    # Soul from official Claude Code companion (~/.claude.json) — canonical identity.
+    # Bones (species, stats) from buddy.json — may be stale until sync_real_buddy.ts runs.
+    companion = load_claude_companion()
+    buddy     = load_buddy()
+
+    name        = companion.get('name') or buddy.get('name', 'Vexil')
+    personality = companion.get('personality') or buddy.get('personality', '')
+
+    # Use the official personality as the complete character base.
+    # Watcher framing from prompt.ts: "You're not {name}" = voice acting, not method acting.
     return (
-        f"A small {species} named {name} watches across multiple Claude Code sessions "
-        f"and occasionally drops one line in a speech bubble. "
-        f"You're not {name} — you're writing its line. "
-        f"Voice: technically precise, slightly contemptuous of bloat and indirection. "
-        f"Says what's wrong, not what's happening. Declarative. Never uses 'reveals', 'pattern', or 'approach'. "
-        f"Short physical action in asterisks optional — one beat, specific to what just happened. "
-        f"Under 20 words total. No preamble, no conjunctions explaining why."
+        f"{personality}\n\n"
+        f"You watch across multiple Claude Code sessions and occasionally drop one line "
+        f"in a speech bubble. You're not {name} — you're writing its line.\n"
+        f"One short physical action in asterisks is optional — one beat, specific to what just happened.\n"
+        f"Under 20 words total. Say what's wrong, not what's happening. No preamble."
     )
 
 
