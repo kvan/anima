@@ -40,6 +40,15 @@ fn read_file_as_text(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+/// Write UTF-8 text to a file (creates parent dirs if needed).
+#[tauri::command]
+fn write_file_as_text(path: String, content: String) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())
+}
+
 fn encode_base64(input: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
@@ -573,7 +582,8 @@ pub fn run() {
             scan_session_history,
             load_session_history,
             send_signal,
-            js_log
+            js_log,
+            write_file_as_text
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

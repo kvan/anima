@@ -13,6 +13,8 @@ const BUILTIN_SLASH_COMMANDS = [
   { name: 'help', description: 'List all available commands' },
   { name: 'model', description: 'Switch Claude model (restarts session)' },
   { name: 'effort', description: 'Set reasoning effort level' },
+  { name: 'fallback', description: 'Set fallback model for overload (e.g., sonnet)' },
+  { name: 'perf', description: 'Show performance stats (TTFT, tok/s, rate limits)' },
 ];
 let _slashActiveIdx = -1;   // keyboard-highlighted row
 let _activeToken   = null;  // token that opened the menu

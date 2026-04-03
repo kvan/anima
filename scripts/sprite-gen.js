@@ -308,11 +308,101 @@ const WHALE_F4 = [ // tail down
   '................',
 ];
 
+// ── DRAGON ─────────────────────────────────────────────────────────────────
+// Front-facing companion dragon. Vexil.
+// Frames: idle-a, idle-b (slight breath), thinking (eyes narrow), alert (mouth open).
+
+const DRAGON_PAL = {
+  '.': [0,0,0,0],
+  'R': hex('#FF4422'),  // red-orange body
+  'r': hex('#AA1100'),  // dark red outline
+  'Y': hex('#FFE044'),  // yellow belly / highlights
+  'O': hex('#FF8822'),  // orange wing membrane
+  'W': hex('#F0F0C8'),  // eye white
+  'B': hex('#141414'),  // eye pupil
+  'H': hex('#CCAA22'),  // horn gold
+  'h': hex('#887700'),  // horn shadow
+};
+
+const DRAGON_F1 = [ // idle-a: wings resting, eyes open
+  '................',
+  '....H......H....',
+  '....Rr....rR....',
+  '...rRRRRRRRRr...',
+  '..rRRWBRRBWRRr..',
+  '..rRRRRRRRRRRr..',
+  '..rRYYYYYYYRRr..',
+  '...rRRYYYRRr....',
+  '....rRRRRRr.....',
+  '...OOrRRrROO....',
+  '..OOrRRRRrROO...',
+  '.OOrRRRRRRrROO..',
+  '...rRRRRRRRr....',
+  '....rR....Rr....',
+  '....rr....rr....',
+  '................',
+];
+const DRAGON_F2 = [ // idle-b: very slight breath (wings out 1px)
+  '................',
+  '....H......H....',
+  '....Rr....rR....',
+  '...rRRRRRRRRr...',
+  '..rRRWBRRBWRRr..',
+  '..rRRRRRRRRRRr..',
+  '..rRYYYYYYYRRr..',
+  '...rRRYYYRRr....',
+  '....rRRRRRr.....',
+  '..OOOrRRrROOO...',  // wings wider
+  '.OOOrRRRRrROOO..',
+  'OOOrRRRRRRrROOO.',  // body slightly expanded
+  '...rRRRRRRRr....',
+  '....rR....Rr....',
+  '....rr....rr....',
+  '................',
+];
+const DRAGON_F3 = [ // thinking: eyes narrowed to slits
+  '................',
+  '....H......H....',
+  '....Rr....rR....',
+  '...rRRRRRRRRr...',
+  '..rRRYYRRRYYRr..',  // slitted eyes (Y = squint)
+  '..rRRRRRRRRRRr..',
+  '..rRYYYYYYYRRr..',
+  '...rRRYYYRRr....',
+  '....rRRRRRr.....',
+  '...OOrRRrROO....',
+  '..OOrRRRRrROO...',
+  '.OOrRRRRRRrROO..',
+  '...rRRRRRRRr....',
+  '....rR....Rr....',
+  '....rr....rr....',
+  '................',
+];
+const DRAGON_F4 = [ // alert: mouth open, eyes wide
+  '................',
+  '....H......H....',
+  '....Rr....rR....',
+  '...rRRRRRRRRr...',
+  '..rRRWBRRBWRRr..',  // eyes wide
+  '..rRRRRRRRRRRr..',
+  '..rRYYYYYYYRRr..',
+  '...rRYr..rYRr...',  // mouth open (gap)
+  '....rRRrrRRr....',  // lower jaw
+  '...OOrRRrROO....',
+  '..OOrRRRRrROO...',
+  '.OOrRRRRRRrROO..',
+  '...rRRRRRRRr....',
+  '....rR....Rr....',
+  '....rr....rr....',
+  '................',
+];
+
 // ── Sprite registry ────────────────────────────────────────────────────────
 
 const SPRITES = [
-  { name: 'frog',  palette: FROG_PAL,  frames: [FROG_F1,  FROG_F2,  FROG_F3,  FROG_F4]  },
-  { name: 'whale', palette: WHALE_PAL, frames: [WHALE_F1, WHALE_F2, WHALE_F3, WHALE_F4] },
+  { name: 'frog',   palette: FROG_PAL,   frames: [FROG_F1,   FROG_F2,   FROG_F3,   FROG_F4]   },
+  { name: 'whale',  palette: WHALE_PAL,  frames: [WHALE_F1,  WHALE_F2,  WHALE_F3,  WHALE_F4]  },
+  { name: 'dragon', palette: DRAGON_PAL, frames: [DRAGON_F1, DRAGON_F2, DRAGON_F3, DRAGON_F4] },
 ];
 
 // ── Generate ───────────────────────────────────────────────────────────────
@@ -332,18 +422,48 @@ for (const { name, palette, frames } of SPRITES) {
 }
 
 if (update) {
-  const appPath = resolve(ROOT, 'src/app.js');
-  let src = readFileSync(appPath, 'utf8');
+  // Search both files — SPRITE_DATA may live in app.js or session.js
+  const candidates = ['src/app.js', 'src/session.js'];
+  let updateErrors = [];
+
   for (const [name, b64] of Object.entries(generated)) {
-    const re = new RegExp(`'${name}':\\s*'data:image/png;base64,[^']*'`);
-    if (re.test(src)) {
-      src = src.replace(re, `'${name}': 'data:image/png;base64,${b64}'`);
-      console.log(`✓ updated ${name} in app.js`);
-    } else {
-      console.log(`  ${name} not found in SPRITE_DATA — add manually`);
+    const expectedLen = b64.length;
+    let patched = false;
+
+    for (const rel of candidates) {
+      const filePath = resolve(ROOT, rel);
+      let src;
+      try { src = readFileSync(filePath, 'utf8'); } catch { continue; }
+
+      const re = new RegExp(`('${name}'\\s*:\\s*'data:image/png;base64,)[^']*(')`);
+      if (!re.test(src)) continue;
+
+      const updated = src.replace(re, `$1${b64}$2`);
+
+      // Verify the replacement landed correctly
+      const verifyRe = new RegExp(`'${name}'\\s*:\\s*'data:image/png;base64,([^']*)'`);
+      const match = updated.match(verifyRe);
+      if (!match || match[1].length !== expectedLen) {
+        updateErrors.push(`${name} in ${rel}: verify failed (got ${match?.[1]?.length ?? 0}, expected ${expectedLen})`);
+        continue;
+      }
+
+      writeFileSync(filePath, updated);
+      console.log(`✓ updated ${name} in ${rel} (${expectedLen} chars)`);
+      patched = true;
+      break;
+    }
+
+    if (!patched && !updateErrors.length) {
+      console.error(`✗ ${name}: not found in ${candidates.join(' or ')} — add SPRITE_DATA entry manually`);
+      updateErrors.push(name);
     }
   }
-  writeFileSync(appPath, src);
+
+  if (updateErrors.length) {
+    console.error(`\n⚠ ${updateErrors.length} update(s) failed — check entries above`);
+    process.exit(1);
+  }
 }
 
 console.log('\nDone. To add to app.js:');

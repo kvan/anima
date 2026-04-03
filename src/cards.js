@@ -83,9 +83,13 @@ export function setActiveSession(id) {
   showChatView();
   renderMessageLog(id);
   const s = sessions.get(id);
-  if (s) updateWorkingCursor(s.status);
-  document.body.classList.remove('no-session-active');
-  $.sessionPrompt?.classList.add('hidden');
+  if (s) {
+    updateWorkingCursor(s.status);
+    document.body.classList.remove('no-session-active');
+    $.sessionPrompt?.classList.add('hidden');
+  } else {
+    showEmptyState();
+  }
   $.inputField?.focus();
   syncOmiSessions();
   document.dispatchEvent(new CustomEvent('pixel:session-changed', { detail: { id } }));

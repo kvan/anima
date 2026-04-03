@@ -64,10 +64,14 @@
       </div>
       <div id="sidebar-h-resize"></div>
       <div id="voice-log-header">
-        <span class="pixel-label">VOICE LOG</span>
-        <button id="btn-clear-voice-log" title="Clear voice log">CLR</button>
+        <div id="voice-log-tabs">
+          <button class="voice-tab" data-vtab="voice">VOICE</button>
+          <button class="voice-tab active" data-vtab="vexil">VEXIL</button>
+        </div>
+        <button id="btn-clear-voice-log" title="Clear log">CLR</button>
       </div>
-      <div id="voice-log"></div>
+      <div id="voice-log" class="hidden"></div>
+      <div id="vexil-log"></div>
       <div id="att-h-resize"></div>
       <div id="attachments-header">
         <span class="pixel-label">ATTACHMENTS</span>
@@ -147,6 +151,19 @@
     <button data-ctx="remove">Remove</button>
   </div>
 
+  <!-- JS error bridge → tee'd log. Must be non-module so it runs before ESM graph. -->
+  <script>
+    function _jslog(msg) {
+      console.error('[jslog]', msg);  // always reachable — fallback if Tauri not ready
+      try { window.__TAURI__.core.invoke('js_log', { msg }); } catch(e) {}
+    }
+    window.onerror = (msg, src, line, col, err) => {
+      _jslog('[onerror] ' + msg + ' @ ' + src + ':' + line + (err ? ' | ' + err.stack : ''));
+    };
+    window.addEventListener('unhandledrejection', e => {
+      _jslog('[unhandledrejection] ' + (e.reason?.stack ?? e.reason));
+    });
+  </script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

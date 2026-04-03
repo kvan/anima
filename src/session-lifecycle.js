@@ -4,10 +4,12 @@ import { $, showConfirm } from './dom.js';
 import {
   sessions, sessionLogs, spriteRenderers, SpriteRenderer,
   getNextIdentity, getActiveSessionId, setActiveSessionId,
-  syncOmiSessions, IDENTITY_SEQ_KEY
+  syncOmiSessions, IDENTITY_SEQ_KEY, ANIMALS
 } from './session.js';
+import { getProjectChar, saveProjectChar, isBuddyAnimal } from './companion.js';
 import { getStagedAttachments, markAttachmentsSent } from './attachments.js';
 import { getSlashCommands, isBuiltinCommand } from './slash-menu.js';
+import { pxLog } from './logger.js';
 
 const { Command } = window.__TAURI__.shell;
 const { open: openDialog } = window.__TAURI__.dialog;
@@ -36,7 +38,26 @@ export function setLifecycleDeps(deps) {
 async function createSession(cwd, opts = {}) {
   const id    = crypto.randomUUID();
   const name  = cwd.split('/').pop() || cwd;
-  const { animalIndex: charIndex } = getNextIdentity();
+  // Persistent familiar: same project always gets the same character
+  const savedAnimal = await getProjectChar(cwd);
+  let charIndex;
+  if (savedAnimal !== null) {
+    const idx = ANIMALS.indexOf(savedAnimal);
+    charIndex = idx >= 0 ? idx : getNextIdentity().animalIndex;
+  } else {
+    charIndex = getNextIdentity().animalIndex;
+    // If the assigned animal matches the buddy's species, find the nearest
+    // valid one by scanning forward — one call to getNextIdentity, no
+    // sequence slots burned.
+    if (isBuddyAnimal(ANIMALS[charIndex])) {
+      let candidate = (charIndex + 1) % ANIMALS.length;
+      while (candidate !== charIndex && isBuddyAnimal(ANIMALS[candidate])) {
+        candidate = (candidate + 1) % ANIMALS.length;
+      }
+      charIndex = candidate;
+    }
+    await saveProjectChar(cwd, ANIMALS[charIndex]);
+  }
 
   sessionLogs.set(id, { messages: [] });
 
@@ -51,7 +72,10 @@ async function createSession(cwd, opts = {}) {
     tokens: 0,
     _liveTokens: 0,
     _dotsPhase: 0,
-    _pendingMsg: null,
+    _pendingQueue: [],
+    _perfHistory: [],     // rolling perf stats per turn
+    _turnStart: null,     // timestamp when message sent to stdin
+    _ttft: null,          // time to first token (ms)
   };
   sessions.set(id, session);
 
@@ -59,7 +83,7 @@ async function createSession(cwd, opts = {}) {
   _deps.setActiveSession(id);
   const modeLabel = opts.readOnly ? ' (read-only)' : '';
   _deps.pushMessage(id, { type: 'system-msg', text: `Starting in ${cwd}${modeLabel}…` });
-  _deps.pushMessage(id, { type: 'system-msg', text: 'Awaiting instructions' });
+  _deps.pushMessage(id, { type: 'system-msg', text: 'Loading\u2026' });
 
   spawnClaude(id); // fire-and-forget — all handling is callback-based
   _deps.setStatus(id, 'waiting'); // static "waiting…" during init — no rotating words until user sends
@@ -73,6 +97,7 @@ async function createSession(cwd, opts = {}) {
 async function spawnClaude(id) {
   const s = sessions.get(id);
   if (!s) return;
+  pxLog('SPAWN', `id:${id.slice(0,8)} cwd:${s.cwd} model:${s._modelOverride||'default'} effort:${s._effortOverride||'default'} continue:${!!s._interrupted}`);
   try {
     const claudeArgs = [
       '-p',
@@ -81,9 +106,11 @@ async function spawnClaude(id) {
       '--verbose',
       '--permission-mode', 'bypassPermissions',
     ];
+    if (s._interrupted) { claudeArgs.push('--continue'); s._interrupted = false; }
     if (s.readOnly) claudeArgs.push('--disallowed-tools', 'Edit,Write,MultiEdit,NotebookEdit,Bash');
     if (s._modelOverride) claudeArgs.push('--model', s._modelOverride);
     if (s._effortOverride) claudeArgs.push('--effort', s._effortOverride);
+    if (s._fallbackModel) claudeArgs.push('--fallback-model', s._fallbackModel);
     const cmd = Command.create('claude', claudeArgs, { cwd: s.cwd });
 
     let _buf = '';
@@ -98,18 +125,30 @@ async function spawnClaude(id) {
     });
 
     cmd.stderr.on('data', (line) => {
-      if (line && line.trim()) _deps.pushMessage(id, { type: 'error', text: `[stderr] ${line.trim()}` });
+      if (line && line.trim()) {
+        pxLog('STDERR', line.trim().slice(0, 120));
+        _deps.pushMessage(id, { type: 'error', text: `[stderr] ${line.trim()}` });
+      }
     });
 
     cmd.on('close', (data) => {
       const code = (typeof data === 'object' && data !== null) ? data.code : data;
-      s.child = null;
       if (s._interrupting) {
         // Intentional ESC interrupt — suppress error status and "Session ended" message.
-        // spawnClaude() already called; this close event is the killed process finishing.
+        // New process already spawning via interruptSession; don't null s.child.
         s._interrupting = false;
         return;
       }
+      s.child = null;
+      if (code !== 0 && !s._manualClose) {
+        pxLog('CRASH', `id:${id.slice(0,8)} exit:${code} — restarting`);
+        s._interrupted = true;
+        _deps.pushMessage(id, { type: 'system-msg', text: `Process crashed (exit ${code}) \u2014 restarting\u2026` });
+        spawnClaude(id);
+        return;
+      }
+      s._manualClose = false;
+      pxLog('CLOSE', `id:${id.slice(0,8)} exit:${code}`);
       _deps.setStatus(id, code === 0 ? 'idle' : 'error');
       _deps.pushMessage(id, { type: 'system-msg', text: `Session ended (exit ${code})` });
     });
@@ -125,9 +164,24 @@ async function spawnClaude(id) {
   }
 }
 
+function interruptSession(id) {
+  const s = sessions.get(id);
+  if (!s || !s.child || s._interrupting) return;
+  pxLog('ESC', `id:${id.slice(0,8)}`);
+  s._interrupting = true;   // tells close handler to suppress "Session ended"
+  s._interrupted = true;    // tells spawnClaude to add --continue
+  s._restarting = true;     // tells init handler to go idle (no pending msg to flush)
+  try { s.child.kill(); } catch (_) {}
+  // Eager respawn: start --continue immediately so Claude warms up with full context
+  // while user thinks. By the time they type, s.child is ready → fast response.
+  spawnClaude(id);
+}
+
 function killSession(id) {
   const s = sessions.get(id);
   if (!s) return;
+  pxLog('KILL', `id:${id.slice(0,8)} cwd:${s.cwd}`);
+  s._manualClose = true;
   try { s.child?.kill(); } catch (_) {}
 
   spriteRenderers.get(id)?.destroy();
@@ -183,6 +237,7 @@ const BUILTIN_COMMANDS = {
     if (log) log.querySelectorAll('.msg').forEach(m => m.remove());
     const sl = sessionLogs.get(id);
     if (sl) sl.messages = [];
+    s._manualClose = true;
     if (s.child) { try { s.child.kill(); } catch (_) {} s.child = null; }
     spawnClaude(id);
     _deps.pushMessage(id, { type: 'system-msg', text: 'Session cleared.' });
@@ -193,6 +248,33 @@ const BUILTIN_COMMANDS = {
     if (!s) return;
     _deps.pushMessage(id, { type: 'system-msg',
       text: `Tokens: ${(s.tokens || 0).toLocaleString()} in / ${(s._liveTokens || 0).toLocaleString()} out` });
+  },
+
+  perf: async (id) => {
+    const s = sessions.get(id);
+    if (!s) return;
+    const h = s._perfHistory || [];
+    if (h.length === 0) {
+      _deps.pushMessage(id, { type: 'system-msg', text: 'No perf data yet — send a message first.' });
+      return;
+    }
+    const med = arr => { const s = [...arr].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m-1]+s[m])/2; };
+    const ttfts = h.map(x => x.ttft).filter(Boolean);
+    const totals = h.map(x => x.total).filter(Boolean);
+    const tps = h.map(x => x.tokPerSec).filter(Boolean);
+    const lines = [
+      `Performance (last ${h.length} turns):`,
+      ttfts.length ? `  TTFT:     ${med(ttfts).toFixed(0)}ms median` : '',
+      totals.length ? `  Total:    ${(med(totals)/1000).toFixed(1)}s median` : '',
+      tps.length ? `  Speed:    ${med(tps).toFixed(0)} tok/s median` : '',
+      `  Rate lim: ${h.filter(x => x.rateLimited).length}/${h.length} turns`,
+      '',
+      'Last 5:',
+      ...h.slice(-5).map((t, i) =>
+        `  ${i+1}. ${t.ttft ? t.ttft+'ms' : '—'} TTFT · ${t.total ? (t.total/1000).toFixed(1)+'s' : '—'} · ${t.tokPerSec ? t.tokPerSec+' tok/s' : '—'}${t.rateLimited ? ' ⚡' : ''}`
+      ),
+    ].filter(Boolean);
+    _deps.pushMessage(id, { type: 'system-msg', text: lines.join('\n') });
   },
 
   help: async (id) => {
@@ -212,9 +294,24 @@ const BUILTIN_COMMANDS = {
       return;
     }
     s._modelOverride = args.trim();
-    if (s.child) { try { s.child.kill(); } catch (_) {} s.child = null; }
+    s._interrupted = true;  // preserve conversation context via --continue
+    s._interrupting = true; // tell close handler this kill is intentional (not a crash)
+    s._restarting = true;   // tell init handler to go idle (no pending msg to flush)
+    if (s.child) { try { s.child.kill(); } catch (_) {} }
     spawnClaude(id);
-    _deps.pushMessage(id, { type: 'system-msg', text: `Switched to ${args.trim()}. Session restarted.` });
+    _deps.pushMessage(id, { type: 'system-msg', text: `Switched to ${args.trim()}. Context preserved.` });
+  },
+
+  fallback: async (id, args) => {
+    const s = sessions.get(id);
+    if (!s) return;
+    if (!args || args.trim() === 'off') {
+      s._fallbackModel = null;
+      _deps.pushMessage(id, { type: 'system-msg', text: 'Fallback model disabled.' });
+    } else {
+      s._fallbackModel = args.trim();
+      _deps.pushMessage(id, { type: 'system-msg', text: `Fallback model set to ${args.trim()}. Takes effect next turn.` });
+    }
   },
 
   effort: async (id, args) => {
@@ -224,9 +321,12 @@ const BUILTIN_COMMANDS = {
       return;
     }
     s._effortOverride = args.trim();
-    if (s.child) { try { s.child.kill(); } catch (_) {} s.child = null; }
+    s._interrupted = true;  // preserve conversation context via --continue
+    s._interrupting = true; // tell close handler this kill is intentional (not a crash)
+    s._restarting = true;   // tell init handler to go idle (no pending msg to flush)
+    if (s.child) { try { s.child.kill(); } catch (_) {} }
     spawnClaude(id);
-    _deps.pushMessage(id, { type: 'system-msg', text: `Effort set to ${args.trim()}. Session restarted.` });
+    _deps.pushMessage(id, { type: 'system-msg', text: `Effort set to ${args.trim()}. Context preserved.` });
   },
 };
 
@@ -234,6 +334,11 @@ const BUILTIN_COMMANDS = {
 async function sendMessageDirect(id, text) {
   const s = sessions.get(id);
   if (!s?.child) return;
+  s._workingPhase = 'thinking';
+  s._turnStart = Date.now();
+  s._ttft = null;
+  s._vexilTurn = false;   // direct sends (e.g. /compact) are never vexil turns
+  s._lastUserMsg = text;
   _deps.setStatus(id, 'working');
   const line = JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n';
   try { await s.child.write(line); } catch (_) { _deps.setStatus(id, 'idle'); }
@@ -258,13 +363,17 @@ async function sendMessage(id, text) {
   if (!s.child) {
     // Process still spawning — queue until system/init fires.
     // Don't _pushMessage yet — show it after "Ready" so log order is correct.
-    s._pendingMsg = raw;
+    s._pendingQueue.push(raw);
     _deps.setStatus(id, 'working'); // badge reacts immediately
     return;
   }
 
   const expanded = await expandSlashCommand(raw);
-  _deps.pushMessage(id, { type: 'user', text: raw }); // show original in log
+  pxLog('MSG→', `id:${id.slice(0,8)} "${raw.slice(0, 80)}${raw.length > 80 ? '…' : ''}"`);
+  s._lastUserMsg = raw;  // captured for vexil routing in events.js
+  s._vexilTurn = raw.toLowerCase().startsWith('vexil ');
+  if (!s._vexilTurn) _deps.pushMessage(id, { type: 'user', text: raw }); // suppress user msg too for vexil turns
+  s._workingPhase = 'thinking';
   _deps.setStatus(id, 'working');
 
   // Build content: string for plain text, array for multimodal (with attachments)
@@ -293,6 +402,8 @@ async function sendMessage(id, text) {
     markAttachmentsSent(id);
   }
 
+  s._turnStart = Date.now();
+  s._ttft = null;
   const line = JSON.stringify({
     type: 'user',
     message: { role: 'user', content }
@@ -340,4 +451,4 @@ async function pickFolder() {
   }
 }
 
-export { createSession, spawnClaude, killSession, sendMessage, expandSlashCommand, warnIfUnknownCommand, pickFolder };
+export { createSession, spawnClaude, killSession, interruptSession, sendMessage, expandSlashCommand, warnIfUnknownCommand, pickFolder };

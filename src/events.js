@@ -2,8 +2,10 @@
 
 import { $, mdParse, toolHint } from './dom.js';
 import { sessions, sessionLogs, getActiveSessionId } from './session.js';
-import { pushMessage, updateWorkingCursor, scheduleScroll } from './messages.js';
+import { pushMessage, updateWorkingCursor, updateCursorPhase, scheduleScroll } from './messages.js';
 import { updateSessionCard } from './cards.js';
+import { pxLog } from './logger.js';
+import { addToVexilLog } from './companion.js';
 
 // Tools that are Claude Code internal scaffolding — never show in UI
 const INTERNAL_TOOLS = new Set([
@@ -46,13 +48,22 @@ export function handleEvent(id, event) {
         s._streamText = '';
         s._streamMsg = null;
         s._streamEl = null;
-      } else if (blk?.type === 'tool_use' && !isInternalTool(blk.name)) {
-        // Show tool name immediately — input arrives later via 'assistant'
-        const toolMsg = { type: 'tool', toolName: blk.name, toolId: blk.id, input: '', result: null };
-        pushMessage(id, toolMsg);
-        if (!s._streamedToolIds) s._streamedToolIds = new Set();
-        s._streamedToolIds.add(blk.id);
-        s.toolPending[blk.id] = true;
+        s._workingPhase = 'writing';
+        updateCursorPhase('writing');
+      } else if (blk?.type === 'tool_use') {
+        pxLog('TOOL', `id:${id.slice(0,8)} ${blk.name}`);
+        if (!isInternalTool(blk.name)) {
+          // Show tool name immediately — input arrives later via 'assistant'
+          const toolMsg = { type: 'tool', toolName: blk.name, toolId: blk.id, input: '', result: null };
+          pushMessage(id, toolMsg);
+          if (!s._streamedToolIds) s._streamedToolIds = new Set();
+          s._streamedToolIds.add(blk.id);
+          s.toolPending[blk.id] = true;
+        }
+        // Show tool name as phase hint (strip mcp__ prefix for readability)
+        const shortName = blk.name.replace(/^mcp__\w+__/, '').replace(/_/g, ' ');
+        s._workingPhase = shortName;
+        updateCursorPhase(shortName);
       }
       break;
     }
@@ -60,13 +71,22 @@ export function handleEvent(id, event) {
     case 'content_block_delta': {
       const delta = event.delta;
       if (delta?.type !== 'text_delta' || !delta.text) break;
+      // Capture TTFT on first text delta of this turn
+      if (s._turnStart && s._ttft === null) {
+        s._ttft = Date.now() - s._turnStart;
+      }
       s._streamText = (s._streamText || '') + delta.text;
+      s._turnText = (s._turnText || '') + delta.text;
+      // Mark text as streamed regardless of vexil — prevents assistant event from
+      // double-accumulating _turnText for vexil turns (break fires before DOM push path)
+      s._didStreamText = true;
+
+      if (s._vexilTurn) break; // suppress session log for vexil-addressed turns
 
       if (!s._streamMsg) {
         // First delta — create the message and capture its DOM element
         s._streamMsg = { type: 'claude', text: s._streamText };
         s._streamEl = pushMessage(id, s._streamMsg);
-        s._didStreamText = true;
       } else {
         // Accumulate in memory at full API speed.
         // Coalesce DOM writes at ~60fps — same pattern terminal emulators use.
@@ -94,15 +114,24 @@ export function handleEvent(id, event) {
       // Cancel any pending rAF flush — we're about to do a full markdown render anyway
       if (s._streamRafId) { cancelAnimationFrame(s._streamRafId); s._streamRafId = null; }
 
+      // Log completed text block
+      if (s._streamText) {
+        const preview = s._streamText.replace(/\n/g, ' ').slice(0, 120);
+        pxLog('TEXT', `id:${id.slice(0,8)} "${preview}${s._streamText.length > 120 ? '…' : ''}"`);
+      }
+
+      // Phase reverts to 'thinking' between blocks
+      s._workingPhase = 'thinking';
+      updateCursorPhase('thinking');
+
       // Block complete — re-render streamed text with full markdown
       if (s._streamMsg && s._streamEl) {
         const bubble = s._streamEl.querySelector('.msg-bubble');
         if (bubble) {
-          const normalized = s._streamMsg.text.replace(/\n\n(?=[ \t]*(?:\d+[.)]\s|[-*+]\s))/g, '\n');
-          s._streamMsg._html = mdParse(normalized);
+          s._streamMsg._html = mdParse(s._streamMsg.text);
           bubble.innerHTML = s._streamMsg._html;
           const paras = bubble.querySelectorAll('p');
-          if (paras.length) paras[paras.length - 1].style.color = '#e8820c';
+          if (paras.length) paras[paras.length - 1].style.color = '#d97857';
         }
       }
       // Clear per-block state; _didStreamText and _streamedToolIds persist until 'assistant'
@@ -127,9 +156,16 @@ export function handleEvent(id, event) {
       const blocks = event.message?.content || [];
 
       // Skip text push if already streamed incrementally via content_block_delta
+      // Also skip entirely for vexil-addressed turns (goes to VEXIL tab at REPLY time)
       if (!s._didStreamText) {
         const texts = blocks.filter(b => b.type === 'text').map(b => b.text);
-        if (texts.length) pushMessage(id, { type: 'claude', text: texts.join('\n') });
+        if (texts.length) {
+          if (s._vexilTurn) {
+            s._turnText = (s._turnText || '') + texts.join('\n'); // capture for VEXIL tab
+          } else {
+            pushMessage(id, { type: 'claude', text: texts.join('\n') });
+          }
+        }
       }
       s._didStreamText = false;
 
@@ -148,10 +184,15 @@ export function handleEvent(id, event) {
               if (toolMsg) {
                 toolMsg.input = input;
                 toolMsg._hint = undefined; // force recompute
+                // Update cursor phase with detailed tool hint
+                const hint = toolHint(b.name, input);
+                if (hint) {
+                  pxLog('TOOL-IN', `id:${id.slice(0,8)} ${b.name} → ${hint.slice(0,80)}`);
+                  s._workingPhase = hint; updateCursorPhase(hint);
+                }
                 if (getActiveSessionId() === id) {
                   const toolEl = $.messageLog?.querySelector(`[data-tool-id="${b.id}"]`);
                   if (toolEl) {
-                    const hint = toolHint(b.name, input);
                     const hintEl = toolEl.querySelector('.tool-hint');
                     if (hintEl) { hintEl.textContent = hint || ''; }
                     else if (hint) {
@@ -199,6 +240,9 @@ export function handleEvent(id, event) {
               }
             }
           }
+          const preview = resultText.replace(/\n/g, ' ').slice(0, 100);
+          const toolName = toolMsg?.toolName || b.tool_use_id?.slice(0,8);
+          pxLog('RESULT', `id:${id.slice(0,8)} ${toolName} → "${preview}${resultText.length > 100 ? '…' : ''}"`);
           delete s.toolPending[b.tool_use_id];
         }
       }
@@ -206,16 +250,55 @@ export function handleEvent(id, event) {
     }
 
     case 'result': {
+      s._workingPhase = null;
       // Prefer result.usage (per-turn total); fall back to live tokens already shown
       const u = event.usage || s._lastMsgUsage;
       if (u) s.tokens += (u.input_tokens || 0) + (u.output_tokens || 0);
       else s.tokens += s._liveTokens; // result.usage absent and no assistant usage either
+
+      // Accumulate output tokens for perf (multiple result events per user turn)
+      if (u?.output_tokens) s._perfOutTokens = (s._perfOutTokens || 0) + u.output_tokens;
+      if (event.subtype === 'rate_limit') s._hitRateLimit = true;
+
       s._liveTokens = 0;
       s._lastMsgUsage = null;
       // Debounce: Claude may immediately start another turn after result.
       // Wait 400ms before going idle so the cursor doesn't flicker between turns.
       clearTimeout(s._idleTimer);
       s._idleTimer = setTimeout(() => {
+        // ── Perf instrumentation (fires once per complete exchange) ──
+        if (s._turnStart) {
+          const total = Date.now() - s._turnStart;
+          const outTok = s._perfOutTokens || 0;
+          const tokPerSec = total > 0 ? Math.round(outTok / (total / 1000)) : 0;
+          const ttft = s._ttft || null;
+          const entry = { ttft, total, tokPerSec, rateLimited: s._hitRateLimit || false, ts: Date.now() };
+          if (!s._perfHistory) s._perfHistory = [];
+          s._perfHistory.push(entry);
+          if (s._perfHistory.length > 50) s._perfHistory.shift();
+          const parts = [];
+          if (ttft) parts.push(`${(ttft/1000).toFixed(1)}s TTFT`);
+          parts.push(`${(total/1000).toFixed(1)}s total`);
+          if (tokPerSec > 0) parts.push(`${tokPerSec} tok/s`);
+          pxLog('REPLY', `id:${id.slice(0,8)} ${parts.join(' · ')}${s._hitRateLimit ? ' ⚡rate-limited' : ''}`);
+          pushMessage(id, { type: 'system-msg', text: parts.join(' · ') });
+          // Route vexil-addressed replies to VEXIL tab only.
+          // Guard: verify _lastUserMsg actually started with 'vexil ' — prevents
+          // state leaks where _vexilTurn is true but the triggering message wasn't vexil.
+          const confirmedVexil = s._vexilTurn
+            && (s._lastUserMsg || '').toLowerCase().startsWith('vexil ');
+          pxLog('VEXIL', `id:${id.slice(0,8)} turn:${s._vexilTurn} confirmed:${confirmedVexil} lastMsg:"${(s._lastUserMsg||'').slice(0,40)}" textLen:${s._turnText?.length ?? 0}`);
+          if (confirmedVexil && s._turnText) {
+            addToVexilLog('vexil', s._turnText.replace(/\n/g, ' ').slice(0, 240));
+          }
+          s._turnStart = null;
+          s._ttft = null;
+          s._hitRateLimit = false;
+          s._perfOutTokens = 0;
+        }
+        // Always reset vexil state — must not bleed into next turn
+        s._turnText = '';
+        s._vexilTurn = false;
         setStatus(id, 'idle');
         if (getActiveSessionId() !== id) {
           s.unread = true;
@@ -227,39 +310,50 @@ export function handleEvent(id, event) {
 
     case 'system':
       if (event.subtype === 'init') {
+        pxLog('READY', `id:${id.slice(0,8)} model:${event.model || 'unknown'}`);
         pushMessage(id, { type: 'system-msg', text: `Ready \u00b7 ${event.model || 'claude'}` });
         // After ESC restart, always go idle regardless of status.
         // Otherwise: don't clobber 'working' if user queued a message before init.
         if (s._restarting || s.status !== 'working') setStatus(id, 'idle');
         s._restarting = false;
-        // Flush message queued before Claude was ready.
-        // pushMessage here so it appears AFTER "Ready" in the log.
-        if (s._pendingMsg && s.child) {
-          const { expandSlashCommand } = _eventDeps;
-          const { warnIfUnknownCommand } = _eventDeps;
-          const msg = s._pendingMsg;
-          s._pendingMsg = null;
-          if (warnIfUnknownCommand(id, msg)) break;
-          pushMessage(id, { type: 'user', text: msg }); // show original
-          expandSlashCommand(msg).then(expanded => {
-            if (!s.child) return;
-            return s.child.write(JSON.stringify({ type: 'user', message: { role: 'user', content: expanded } }) + '\n');
-          }).catch(() => {
-            pushMessage(id, { type: 'error', text: 'Failed to send \u2014 please resend your message' });
-            setStatus(id, 'idle');
-          });
+        // Flush messages queued before Claude was ready.
+        // pushMessage here so they appear AFTER "Ready" in the log.
+        if (s._pendingQueue?.length && s.child) {
+          const { expandSlashCommand, warnIfUnknownCommand } = _eventDeps;
+          const queue = s._pendingQueue.splice(0);
+          (async () => {
+            for (const msg of queue) {
+              if (warnIfUnknownCommand(id, msg)) continue;
+              const isVexil = msg.toLowerCase().startsWith('vexil ');
+              if (!isVexil) pushMessage(id, { type: 'user', text: msg });
+              try {
+                const expanded = await expandSlashCommand(msg);
+                if (!s.child) break;
+                s._turnStart = Date.now();
+                s._ttft = null;
+                s._hitRateLimit = false;
+                s._vexilTurn = isVexil;
+                s._lastUserMsg = msg;
+                await s.child.write(JSON.stringify({ type: 'user', message: { role: 'user', content: expanded } }) + '\n');
+              } catch (_) {
+                pushMessage(id, { type: 'error', text: 'Failed to send \u2014 please resend your message' });
+                setStatus(id, 'idle');
+                break;
+              }
+            }
+          })();
         }
       }
       break;
 
     case 'rate_limit_event':
-      // CLI retries automatically — don't add a permanent log entry (looks like an error).
-      // Flash badge to 'waiting' for 3s so there's ambient feedback without alarming the user.
-      setStatus(id, 'waiting');
-      clearTimeout(s._rateLimitTimer);
-      s._rateLimitTimer = setTimeout(() => {
-        if (s.status === 'waiting') setStatus(id, 'working');
-      }, 3000);
+      s._hitRateLimit = true;
+      pxLog('RATE-LIMIT', `id:${id.slice(0,8)} — CLI retrying automatically`);
+      break;
+
+    default:
+      // Log unknown event types so we can discover buddy/companion events
+      pxLog('UNKNOWN-EVENT', `id:${id.slice(0,8)} type:${event.type} keys:${Object.keys(event).join(',')}`);
       break;
   }
 }

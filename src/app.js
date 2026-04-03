@@ -9,7 +9,7 @@ import {
 } from './session.js';
 import {
   spawnClaude, sendMessage, pickFolder,
-  expandSlashCommand, warnIfUnknownCommand, setLifecycleDeps
+  expandSlashCommand, warnIfUnknownCommand, interruptSession, setLifecycleDeps
 } from './session-lifecycle.js';
 import { pushMessage, updateWorkingCursor, setPinToBottom, renderMessageLog, createMsgEl } from './messages.js';
 import { handleEvent, setStatus, setEventDeps } from './events.js';
@@ -22,8 +22,9 @@ import {
   acceptActiveSlashItem, getSlashActiveIdx
 } from './slash-menu.js';
 import { setHistoryDeps, initHistory, scanHistory, exitHistoryView, isHistoryActive, showHistoryFind } from './history.js';
+import { initCompanion } from './companion.js';
 
-const { invoke } = window.__TAURI__.core;
+
 
 // ── Wire cross-module deps ────────────────────────────────
 setLifecycleDeps({
@@ -65,6 +66,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initVoice();
   initAttachments({ getActiveSessionId });
   initHistory();
+  initCompanion();
 
   // Animate working badge: per-session phase cycles "" "." ".." "..." every 400ms
   setInterval(() => {
@@ -265,22 +267,24 @@ window.addEventListener('DOMContentLoaded', () => {
   // Killer whale sprite — direction-aware, animated + swims left↔right
   const _whaleEl = $.sessionPromptWhale;
   let _whaleFrame = 0, _whaleX = 0, _whaleDir = 1, _whaleTick = 0;
-  _whaleEl.style.backgroundImage = `url(${SPRITE_DATA['k-whale-half5']})`;
-  _whaleEl.style.transform = 'scaleX(-1)'; // sprite faces left by default; flip to face right
-  setInterval(() => {
-    // 2-frame animation: alternate frame 0 / frame 1 (18px wide each, displayed at 3x = 54px)
-    _whaleFrame = (_whaleFrame + 1) % 2;
-    _whaleEl.style.backgroundPosition = `${-_whaleFrame * 54}px 0px`;
-    // Movement — bounce left ↔ right within track
-    const track = _whaleEl.parentElement;
-    const maxX = Math.max(0, track.offsetWidth - 54);
-    _whaleX += _whaleDir * 10;
-    if (_whaleX >= maxX) { _whaleX = maxX; _whaleDir = -1; _whaleEl.style.transform = 'scaleX(1)';  }
-    if (_whaleX <= 0)    { _whaleX = 0;    _whaleDir =  1; _whaleEl.style.transform = 'scaleX(-1)'; }
-    _whaleEl.style.left = _whaleX + 'px';
-    _whaleTick++;
-    if (_whaleTick % 2 === 0) $.btnNewSession.classList.toggle('plus-inverted');
-  }, 320);
+  if (_whaleEl) {
+    _whaleEl.style.backgroundImage = `url(${SPRITE_DATA['k-whale-half5']})`;
+    _whaleEl.style.transform = 'scaleX(-1)'; // sprite faces left by default; flip to face right
+    setInterval(() => {
+      // 2-frame animation: alternate frame 0 / frame 1 (18px wide each, displayed at 3x = 54px)
+      _whaleFrame = (_whaleFrame + 1) % 2;
+      _whaleEl.style.backgroundPosition = `${-_whaleFrame * 54}px 0px`;
+      // Movement — bounce left ↔ right within track
+      const track = _whaleEl.parentElement;
+      const maxX = Math.max(0, track.offsetWidth - 54);
+      _whaleX += _whaleDir * 10;
+      if (_whaleX >= maxX) { _whaleX = maxX; _whaleDir = -1; _whaleEl.style.transform = 'scaleX(1)';  }
+      if (_whaleX <= 0)    { _whaleX = 0;    _whaleDir =  1; _whaleEl.style.transform = 'scaleX(-1)'; }
+      _whaleEl.style.left = _whaleX + 'px';
+      _whaleTick++;
+      if (_whaleTick % 2 === 0) $.btnNewSession?.classList.toggle('plus-inverted');
+    }, 320);
+  }
 
   function positionSessionPrompt() {
     const sidebar = $.sidebar.getBoundingClientRect();
@@ -353,12 +357,12 @@ window.addEventListener('DOMContentLoaded', () => {
       const s = sessions.get(getActiveSessionId());
       if (s && s.child && (s.status === 'working' || s.status === 'waiting')) {
         e.preventDefault();
-        // Send SIGINT (2) to Claude process — cancels the current turn without
-        // killing the session or losing conversation context.
-        try { invoke('send_signal', { pid: s.child.pid, signal: 2 }); } catch (_) {}
+        // Kill + respawn with --continue. SIGINT doesn't work in stream-json mode
+        // (it terminates the process instead of canceling the turn).
         clearTimeout(s._idleTimer);
-        pushMessage(getActiveSessionId(), { type: 'system-msg', text: 'Interrupted' });
-        setStatus(getActiveSessionId(), 'idle');
+        pushMessage(getActiveSessionId(), { type: 'system-msg', text: 'Interrupted — reconnecting…' });
+        setStatus(getActiveSessionId(), 'waiting');
+        interruptSession(getActiveSessionId());
       }
     }
   });

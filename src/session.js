@@ -43,7 +43,9 @@ const SPRITE_DATA = {
   'frog2-270': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAABzUlEQVR4nOWXPUvDUBSGz71EIQUblaSCnQRBnZROXbrqUhxEcOg/EHUSVHB0dFHE0d1BB+nk2qWjW39BB00rtEJaUImc255wG/PZDx3yQrm5Sd77nPMmTVpm2zYkWRwSLg4JF4eEi0PCxSHhUoIOpgwNA/qW91lmi+HImBgcxX2byH4/bxB/4gGkDG0OAN4vCwX3fjtqEaM0gBwcJ81XAvyi+f3HMtzuFGF5qvdtscwWFccm1UD/HMElYR3Pe9tivahrROFzP/PpyqqApgxNjKjN+ycxDxP5KUAUBogfKcCwNYQXPVQH8qMoDp97mdGoZwyROBpwRNE8Chw1TIDE9+LSfJx8Jj+ACN54M8UcQ8DU1rcOB0xLJ7vQabQHbkFch+DoQ6EXoXLhVITspxpkfj678IuLeihfwXGl4vksicMnv+JehJqn7XyuBPWXGmQ31pzm0ex+C5AQ7qyRMUA/uh5opH8FFj3NEr9af4Xq3TkUcyWHjXX4NT8sn8npH9hfYnt2WoGLT4CzeQ0+mk24Yb2c6DjO3XeAqqfj+LudRlt13z1x+O4QYvq7ltkSfCcAvyv6F/rPf6ScNlQ9HfijKEyqnnauaIRzZ0ZhjVM/00Y1hr1+fYAAAAAASUVORK5CYII=',
   'frog3': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAACXBIWXMAAAsTAAALEwEAmpwYAAABy0lEQVRYheWXvUvDUBTFbx5BTIpQIUFQcCidBNGtXVydqrg5O7hYcJMKzp06V3DyL9BBnBydKi6Cq5PgIK0iSNMuEjmvvfE1JmnSDx1yoLyP5Lzfvfe9Jq3mui6lWYJSLkEpl6CUS1DKJSjl0qMumhkbBfpS55x2U0OrabLxlPRtovrDvFH8qRfAzNjzRPS+Vyv45924QYyTADhop83XI/wy+frBNZVPS5TN974tTrvJwWnTSqB/j+SyEMfJzbZcL+4acfgizLxVyUmombFlC1U3r+R4mNjPBYRQQHyUAg5bQ3rh4TjAj6MkfBFkhtGybFlxGNBCPI4Dh0YpIPODuDyeJF9TH0AMb7V6SaIIqNr+2s6AaSVXoY7TGjiCWIfh8EHwAqoGzkGofo5B5eeLC7+4UO3iks6P7gKfJUn47Nf9i3Dy3N8tFuj55YGWl9a95GH2vwVYgP+sYdOtdTiQSH8HFgPNCv+p8UqVxhmVSwWPjTjCkh+Vr6nVXy07sj+b1em+OkMbxwZ9fL7RY92U83wdY/8JMEwrib/bcVqG//Qk4fuLkNDfddpNyfcKELajf6H//EcquGOYVuSPomEyTMvb0Rj3zo3DmqS+Aaa7NqYBW1vuAAAAAElFTkSuQmCC',
   'k-whale-half5': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAKCAYAAADcpvzeAAAACXBIWXMAAAsTAAALEwEAmpwYAAABgUlEQVQ4jYVUwU7DMAxN2o5NQhw3reMCf+Bv2GFS6Klf2lNVqYf9QvIHnNCk3bgApS1BDnXxomR7kpc6sd9enMTSWitCMMZIALB8FEKgWeYjEgAYgyQTD8aoohxOb6+UEwcK0lpLHLnhnNY63e6eLPo4kmmtE+77uSxfUux6vQ3GkRGPExLYEUKqohzH/kuczydpjMlUUfboE9LFSjR1lQLAT4jjRSk5jGKuHvKEipI/PjsRWMELQbeIjDELVZTfKGoScw8AH5x8l+fSJqtZYPf5Pq9l2dLlIYiDAwVlQaJkJYbun2izya1PFLoPxMFFcAxD54zEhZD4RGQ+Ucfmm7paesf7FzeKCzHH49FZDE1dJf7GMiLiFSGS/X4f4+rxB19b9N8i+VSZtm3wdc53h+6Ru0N4JFTKGLIAkY+pYrizB5pTRTmvN3VFn3cA4DblwwkKER0Oag5q2+YmkScM+457FPgK6RsrQcfMN0W9zjnXekOor1yb5+vUf2g+1q98+wV7FqD/eigC7wAAAABJRU5ErkJggg==',
-  'k-whale2': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAACXBIWXMAAAsTAAALEwEAmpwYAAACUElEQVRYhcVXvW7jMAymFCfN3SFjC8dTHkHPkMGAmilPmikw4CGvYL3BTYcC3Q4Zrmls60BXdAlX/inyYwIEZUHkR1KSSQlrLXSRMUagVEp1L7wRXQvfGOOdF30J6DEq+hy7ZQK/gw8A3nXBQGUkHFsEZPMSAIouG10O9gVwTfy2ExD0OYdSb7YlzSf73URvtjXoy5/foi+AtiCHJOeW+AAgpCfT3ACClcl+N8Xv4vwGcawLlORMXwA0NsZIwnHfyJN74bvTQjgoP+bwH8A5yzLhWIbRyj4+htbNB/SNMsuyH1ynxc4E13Imu8Rj4wv+E6SdeNZa5MXn3Xp9fal2DACmcaxPaZr8BIA339Fiu4lHt9qtNE2merM9084hTabzageVUuWY+AFNRMulsHL+4YycQ376Wy9+elpaVGDUCd4MQCmVJ/vdTG+27+iEA//Fgx8DHwDKgIOf/n2CcsrzU8VIQfCAAu/kO79n3wkg2e8kD2AMfCqLASrmBZRc4XA4VHK9XnsdAoCzy6y9NIBnrWEsfAAQ1T8AM0QL2sgp4n36sntVAEy/KwC007QxBj6dAIEJcHcH07eghXGsa6U0TWg4U0pV2ed0SQBI98bnXaFoVAFJTQZvOLDZ8DUVvFlpBnA8Hmu7i8WiM4B74tP1qck26ijVSTee+Wp1G6MuyjBaUR0XYbSSvL43a/W18cNo9cDwsQ+oMRwDY/HlMUTdGZaIZsYHdl14xMuhjxWPrUvx28ZeXYEdlgPDhUOcbT5Q6lruyBtAmwPuPXIz/D6b/wEwuXBB+7CyJwAAAABJRU5ErkJggg=='
+  'k-whale2': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAACXBIWXMAAAsTAAALEwEAmpwYAAACUElEQVRYhcVXvW7jMAymFCfN3SFjC8dTHkHPkMGAmilPmikw4CGvYL3BTYcC3Q4Zrmls60BXdAlX/inyYwIEZUHkR1KSSQlrLXSRMUagVEp1L7wRXQvfGOOdF30J6DEq+hy7ZQK/gw8A3nXBQGUkHFsEZPMSAIouG10O9gVwTfy2ExD0OYdSb7YlzSf73URvtjXoy5/foi+AtiCHJOeW+AAgpCfT3ACClcl+N8Xv4vwGcawLlORMXwA0NsZIwnHfyJN74bvTQjgoP+bwH8A5yzLhWIbRyj4+htbNB/SNMsuyH1ynxc4E13Imu8Rj4wv+E6SdeNZa5MXn3Xp9fal2DACmcaxPaZr8BIA339Fiu4lHt9qtNE2merM9084hTabzageVUuWY+AFNRMulsHL+4YycQ376Wy9+elpaVGDUCd4MQCmVJ/vdTG+27+iEA//Fgx8DHwDKgIOf/n2CcsrzU8VIQfCAAu/kO79n3wkg2e8kD2AMfCqLASrmBZRc4XA4VHK9XnsdAoCzy6y9NIBnrWEsfAAQ1T8AM0QL2sgp4n36sntVAEy/KwC007QxBj6dAIEJcHcH07eghXGsa6U0TWg4U0pV2ed0SQBI98bnXaFoVAFJTQZvOLDZ8DUVvFlpBnA8Hmu7i8WiM4B74tP1qck26ijVSTee+Wp1G6MuyjBaUR0XYbSSvL43a/W18cNo9cDwsQ+oMRwDY/HlMUTdGZaIZsYHdl14xMuhjxWPrUvx28ZeXYEdlgPDhUOcbT5Q6lruyBtAmwPuPXIz/D6b/wEwuXBB+7CyJwAAAABJRU5ErkJggg==',
+  // ── Companion sprites (species-keyed for buddy system) ──────────────────────
+  'dragon': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAA0klEQVR4nO2V0Q2EIAyGu8IlTMAsDucsTnIPN8SN4AY964mHgm0RTQSvCQm0/f7SJiLA35b26izuidXCAzYWuwcEieSjWNW8S+JWTLwK3of7/onGmPlMe/JxIkfy+G6+y7+85zujvmp66gYK5H8CbtKxpblAoXw4xRTwavzA+Lmjn/l8ti+hfHyuytN+fWZhbIfE1gbQuJ9iEivxGo099bP5GKwV2Wo+ZQg59bN5DpZEpOY1Q8ipfwQ/m/QrSXrECuQXImu/VqB0HtzLqfXXxt/OPvLnWmPWtvjRAAAAAElFTkSuQmCC'
 };
 
 // ── SpriteRenderer ─────────────────────────────────────────
@@ -51,7 +53,7 @@ const SPRITE_DATA = {
 // Sheet 64x16 displayed at 128x32 (2x). backgroundPosition shifts per frame.
 
 const ANIMALS = ['cat2', 'snake', 'penguin', 'octopus', 'crab', 'rat', 'seal', 'rabbit', 'cat', 'frog3', 'octopus-90', 'octopus-180', 'octopus-270', 'cat-120', 'rabbit-120', 'penguin-120', 'crab-120', 'rat-120', 'seal-120', 'snake-120', 'cat2-120', 'cat-195', 'rabbit-195', 'penguin-195', 'crab-195', 'rat-195', 'seal-195', 'snake-195', 'cat2-195', 'cat-270', 'rabbit-270', 'penguin-270', 'crab-270', 'rat-270', 'seal-270', 'snake-270', 'cat2-270'];
-const IDENTITY_SEQ_KEY = 'pixel-terminal-identity-seq-v10';
+const IDENTITY_SEQ_KEY = 'pixel-terminal-identity-seq-v11';
 // First BASE_ANIMAL_COUNT entries in ANIMALS are 0-degree originals; rest are hue-rotated.
 // Octopus base is at index 3; octopus-90/180/270 are hue-rotated variants in the hue batch.
 const BASE_ANIMAL_COUNT = 10;
@@ -65,16 +67,40 @@ function _shuffle(arr) {
   return a;
 }
 
-function getNextIdentity() {
-  // Each full cycle: all BASE_ANIMAL_COUNT original-color animals (shuffled) come first,
-  // then all hue-rotated animals (shuffled). Regenerates on first run and after exhaustion.
-  const store = JSON.parse(localStorage.getItem(IDENTITY_SEQ_KEY) || '{"idx":0,"seq":null}');
+// Map each base animal name → array of ANIMALS indices for its hue variants
+const _HUE_VARIANTS = {};
+for (let i = 0; i < BASE_ANIMAL_COUNT; i++) {
+  const base = ANIMALS[i];
+  _HUE_VARIANTS[base] = [];
+  for (let j = BASE_ANIMAL_COUNT; j < ANIMALS.length; j++) {
+    if (ANIMALS[j].startsWith(base + '-')) _HUE_VARIANTS[base].push(j);
+  }
+}
 
-  if (!store.seq || store.idx >= ANIMALS.length) {
-    const base = _shuffle(Array.from({ length: BASE_ANIMAL_COUNT }, (_, i) => i));
-    const hue  = _shuffle(Array.from({ length: ANIMALS.length - BASE_ANIMAL_COUNT }, (_, i) => BASE_ANIMAL_COUNT + i));
-    store.seq = [...base, ...hue];
+function getNextIdentity() {
+  // Deals complete rounds of BASE_ANIMAL_COUNT unique base types before repeating.
+  // Round 0: base (0-hue) animals, shuffled randomly.
+  // Round 1+: each base type uses a hue variant (cycling through available variants).
+  // Animals without hue variants (frog3) reuse their base sprite on round 1+.
+  const store = JSON.parse(localStorage.getItem(IDENTITY_SEQ_KEY) || '{"idx":0,"seq":null,"round":0}');
+
+  if (!store.seq || store.idx >= store.seq.length) {
+    const round = store.round || 0;
+    const baseOrder = _shuffle(Array.from({ length: BASE_ANIMAL_COUNT }, (_, i) => i));
+
+    if (round === 0) {
+      // First round: all base sprites, shuffled
+      store.seq = baseOrder;
+    } else {
+      // Subsequent rounds: pick a hue variant for each base type
+      store.seq = baseOrder.map(baseIdx => {
+        const variants = _HUE_VARIANTS[ANIMALS[baseIdx]];
+        if (!variants || variants.length === 0) return baseIdx; // frog3: no variants
+        return variants[(round - 1) % variants.length];
+      });
+    }
     store.idx = 0;
+    store.round = round + 1;
   }
 
   const animalIndex = store.seq[store.idx];

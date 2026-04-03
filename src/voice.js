@@ -5,6 +5,7 @@ import { sessions, getActiveSessionId } from './session.js';
 import { sendMessage } from './session-lifecycle.js';
 import { pushMessage } from './messages.js';
 import { setActiveSession } from './cards.js';
+import { LINT_LOG, setVexilLogListener } from './companion.js';
 
 const { Command } = window.__TAURI__.shell;
 const { invoke } = window.__TAURI__.core;
@@ -40,6 +41,53 @@ function appendVoiceLog(text, ts, dispatched) {
   $.voiceLog.appendChild(entry);
   while ($.voiceLog.children.length > MAX_VOICE_LOG) $.voiceLog.removeChild($.voiceLog.firstChild);
   $.voiceLog.scrollTop = $.voiceLog.scrollHeight;
+}
+
+// ── Vexil chat log ─────────────────────────────────────────
+
+let _vexilTabActive = true;  // VEXIL is the default visible tab
+
+const STATE_CLASS = {
+  blocked:        'vexil-entry--blocked',
+  needs_approval: 'vexil-entry--blocked',
+  warn:           'vexil-entry--warn',
+  ops:            'vexil-entry--ops',
+};
+
+function renderVexilLog(entries) {
+  if (!$.vexilLog) return;
+  $.vexilLog.innerHTML = entries.map(e => {
+    const cls = STATE_CLASS[e.state] ?? '';
+    return `<div class="vexil-entry ${cls}"><span class="vexil-ts">${escapeHtml(e.ts)}</span>${escapeHtml(e.msg)}</div>`;
+  }).join('');
+  // Oldest first in array — scroll to bottom so latest is visible (matches session log flow)
+  $.vexilLog.scrollTop = $.vexilLog.scrollHeight;
+}
+
+function initVexilTabs() {
+  const tabs = document.querySelectorAll('.voice-tab');
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      const target = btn.dataset.vtab;
+      _vexilTabActive = target === 'vexil';
+      if ($.voiceLog)  $.voiceLog.classList.toggle('hidden', _vexilTabActive);
+      if ($.vexilLog) $.vexilLog.classList.toggle('hidden', !_vexilTabActive);
+      // Force-render current log when switching to Vexil tab
+      if (_vexilTabActive) renderVexilLog(LINT_LOG);
+    });
+  });
+
+  // Tab-aware CLR: clear whichever panel is active
+  $.btnClearVoiceLog?.addEventListener('click', () => {
+    if (_vexilTabActive) {
+      LINT_LOG.length = 0;
+      renderVexilLog(LINT_LOG);
+    } else {
+      if ($.voiceLog) $.voiceLog.innerHTML = '';
+    }
+  }, true);  // capture phase — fires before the existing listener in initVoice
 }
 
 // ── Indicator updates ──────────────────────────────────────
@@ -186,10 +234,7 @@ export function initVoice() {
     }
   });
 
-  // Clear voice log button
-  $.btnClearVoiceLog?.addEventListener('click', () => {
-    if ($.voiceLog) $.voiceLog.innerHTML = '';
-  });
+  // CLR handled by initVexilTabs (tab-aware, capture phase)
 
   // Connection events
   tauriListen('omi:connected', () => {
@@ -246,4 +291,8 @@ export function initVoice() {
   $.voiceSourceBle?.addEventListener('click', () => _switchVoiceSource('ble'));
   $.voiceSourceMic?.addEventListener('click', () => _switchVoiceSource('mic'));
   _settingsUpdate();
+
+  // Vexil chat log tab
+  initVexilTabs();
+  setVexilLogListener(renderVexilLog);
 }

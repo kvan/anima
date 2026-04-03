@@ -12,6 +12,9 @@ const WORKING_MSGS = [
 ];
 let _workingTimer = null;
 let _workingMsgIdx = 0;
+const _SPINNER = ['\u280b', '\u2819', '\u2839', '\u2838', '\u283c', '\u2834', '\u2826', '\u2827', '\u2807', '\u280f'];
+let _spinnerIdx = 0;
+let _spinnerTimer = null;
 
 // rAF-coalesced scroll — only scrolls if user hasn't manually scrolled up
 let _scrollPending = false;
@@ -40,26 +43,54 @@ export function updateWorkingCursor(status) {
       $.messageLog.appendChild(cur);
       scheduleScroll();
     }
-    // Build cursor structure once, update text node only — avoid innerHTML re-parsing every 3s
+    // Build cursor structure once: glyph + flavor word + phase hint
     if (!cur.firstChild) {
       const glyph = document.createElement('span');
       glyph.className = 'cursor-blink';
-      glyph.textContent = '\u258b';
+      glyph.textContent = _SPINNER[0];
       cur.appendChild(glyph);
-      cur.appendChild(document.createTextNode(''));
+      const flavor = document.createElement('span');
+      flavor.className = 'cursor-flavor';
+      cur.appendChild(flavor);
+      const phase = document.createElement('span');
+      phase.className = 'cursor-phase';
+      cur.appendChild(phase);
     }
-    const textNode = cur.lastChild;
+    const glyphSpan = cur.querySelector('.cursor-blink');
+    const flavorSpan = cur.querySelector('.cursor-flavor');
+    const phaseSpan = cur.querySelector('.cursor-phase');
     const setMsg = () => {
-      textNode.textContent = ' ' + WORKING_MSGS[_workingMsgIdx++ % WORKING_MSGS.length] + '\u2026';
+      if (flavorSpan) flavorSpan.textContent = '\u2009' + WORKING_MSGS[_workingMsgIdx++ % WORKING_MSGS.length] + '\u2026';
     };
     setMsg();
+    // Show current phase immediately
+    if (phaseSpan) {
+      const s = sessions.get(getActiveSessionId());
+      phaseSpan.textContent = s?._workingPhase ? ' \u00b7 ' + s._workingPhase : '';
+    }
     clearInterval(_workingTimer);
     _workingTimer = setInterval(setMsg, 3000);
+    // ASCII spinner: |, /, —, \ cycling at 100ms
+    clearInterval(_spinnerTimer);
+    _spinnerTimer = setInterval(() => {
+      _spinnerIdx = (_spinnerIdx + 1) % _SPINNER.length;
+      if (glyphSpan) glyphSpan.textContent = _SPINNER[_spinnerIdx];
+    }, 80);
   } else {
     clearInterval(_workingTimer);
     _workingTimer = null;
+    clearInterval(_spinnerTimer);
+    _spinnerTimer = null;
     cur?.remove();
   }
+}
+
+// Update just the phase hint without rebuilding the cursor — called from events.js
+export function updateCursorPhase(phase) {
+  const el = document.getElementById('working-cursor');
+  if (!el) return;
+  const phaseSpan = el.querySelector('.cursor-phase');
+  if (phaseSpan) phaseSpan.textContent = phase ? ' \u00b7 ' + phase : '';
 }
 
 export function pushMessage(id, msg) {
@@ -83,7 +114,8 @@ export function pushMessage(id, msg) {
 
 export function renderMessageLog(id) {
   if (!$.messageLog) return;
-  $.messageLog.innerHTML = ''; // cursor gets wiped here — restore below
+  // Remove only messages/cursor — preserve #empty-state
+  $.messageLog.querySelectorAll('.msg, .working-cursor, .msg-new').forEach(el => el.remove());
   const data = sessionLogs.get(id);
   if (data) {
     // DocumentFragment: build all elements off-DOM, single reflow on append
@@ -109,13 +141,12 @@ export function createMsgEl(msg) {
   } else if (msg.type === 'claude') {
     // Cache parsed HTML — msg.text is immutable after creation
     if (!msg._html) {
-      const normalized = msg.text.replace(/\n\n(?=[ \t]*(?:\d+[.)]\s|[-*+]\s))/g, '\n');
-      msg._html = mdParse(normalized);
+      msg._html = mdParse(msg.text);
     }
     el.innerHTML = `<div class="msg-bubble">${msg._html}</div>`;
     // Orange for the last paragraph regardless of trailing hr/empty nodes
     const paras = el.querySelectorAll('.msg-bubble p');
-    if (paras.length) paras[paras.length - 1].style.color = '#e8820c';
+    if (paras.length) paras[paras.length - 1].style.color = '#d97857';
 
   } else if (msg.type === 'tool') {
     const icon = toolIcon(msg.toolName);
