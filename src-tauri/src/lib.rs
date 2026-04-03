@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 extern crate libc;
 
 use tauri::{
@@ -47,6 +47,17 @@ fn write_file_as_text(path: String, content: String) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())
+}
+
+/// Atomically append a single line to a file (O_APPEND — safe for concurrent writers).
+#[tauri::command]
+fn append_line_to_file(path: String, line: String) -> Result<(), String> {
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
+    writeln!(file, "{}", line).map_err(|e| e.to_string())
 }
 
 fn encode_base64(input: &[u8]) -> String {
@@ -583,7 +594,8 @@ pub fn run() {
             load_session_history,
             send_signal,
             js_log,
-            write_file_as_text
+            write_file_as_text,
+            append_line_to_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
