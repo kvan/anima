@@ -492,7 +492,7 @@ export function setVexilLogListener(cb) { _vexilLogListener = cb; }
 export function addToVexilLog(state, msg) {
   addToLintLog(state, msg);
   invoke('js_log', { msg: `[vexil-reply] state:${state} "${msg?.slice(0,80)}"` }).catch(() => {});
-  enqueueBubble({ msg, type: 'vexil', interactive: false });
+  // bubble suppressed — log tab is the surface
 }
 
 // ── Vexil Master output poll ──────────────────────────────────────────────────
@@ -510,7 +510,7 @@ async function pollMasterOut() {
         if (entry.msg) {
           addToLintLog('vexil', entry.msg);
           invoke('js_log', { msg: `[vexil-master] "${entry.msg?.slice(0,80)}"` }).catch(() => {});
-          enqueueBubble({ msg: entry.msg, type: 'vexil', interactive: false });
+          // bubble suppressed — log tab is the surface
         }
       } catch { /* malformed line */ }
     }

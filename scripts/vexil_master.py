@@ -262,6 +262,12 @@ def main() -> None:
     # turn_complete events seen this batch: {session_id: tool_count}
     turn_complete_this_batch: Dict[str, int] = {}
 
+    # ── Cross-session memory lint state ───────────────────────────────────────
+    # id → [(session_id, ts)] — detect same ID written in 2+ sessions within 60s
+    memory_id_writes: Dict[str, list] = {}
+    # violation_key → {session_ids} — detect same routing violation in 2+ sessions
+    memory_routing_sessions: Dict[str, set] = {}
+
     # Seed offset — skip events from before this daemon started
     try:
         feed_offset = os.path.getsize(FEED_PATH)
@@ -366,6 +372,25 @@ def main() -> None:
                         trigger = 'token_bloat'
                         trigger_data = {'tokens': tokens, 'session_id': sid}
 
+            elif etype == 'memory_lint':
+                # Cross-session lint events from memory_lint.py hook
+                mid       = entry.get('mem_id', '')
+                violation = entry.get('violation', 'clean')
+                if mid:
+                    if mid not in memory_id_writes:
+                        memory_id_writes[mid] = []
+                    memory_id_writes[mid].append((sid, ets))
+                if 'block_urn_routing' in violation:
+                    memory_routing_sessions.setdefault('block_urn_routing', set()).add(sid)
+
+        # ── Prune stale memory lint state ────────────────────────────────────
+        # Keep only recent entries so memory doesn't grow unbounded
+        for mid in list(memory_id_writes.keys()):
+            memory_id_writes[mid] = [(s, t) for s, t in memory_id_writes[mid]
+                                     if (now - t) < 120.0]
+            if not memory_id_writes[mid]:
+                del memory_id_writes[mid]
+
         # ── Per-turn commentary (native buddy cadence) ───────────────────────
         # Fires once per completed turn if the session did real work (tool_count > 0).
         # Uses per-session cooldown (20s) not global, so 2 active sessions both comment.
@@ -433,6 +458,29 @@ def main() -> None:
                     if (now - last_comment_ts) > COOLDOWN:
                         trigger = 'cross_session_error'
                         trigger_data = {'key': key, 'sessions': list(set(sessions))[:3]}
+                        break
+
+        # Memory ID collision — same ID written in 2+ sessions within 60s
+        if trigger is None:
+            for mid, entries in list(memory_id_writes.items()):
+                recent = [(s, t) for s, t in entries if (now - t) < 60.0]
+                sessions = {s for s, _ in recent}
+                if len(sessions) >= 2 and (now - last_comment_ts) > COOLDOWN:
+                    trigger = 'memory_id_collision'
+                    trigger_data = {'id': mid, 'sessions': list(sessions)[:3]}
+                    memory_id_writes.pop(mid, None)
+                    break
+
+        # Memory routing collision — same UNR routing violation in 2+ sessions
+        if trigger is None:
+            for vkey, sessions in list(memory_routing_sessions.items()):
+                if len(sessions) >= 2 and (now - last_comment_ts) > COOLDOWN:
+                    pat_key = f'routing:{vkey}'
+                    if pat_key not in fired_patterns:
+                        trigger = 'memory_routing_collision'
+                        trigger_data = {'sessions': list(sessions)[:3]}
+                        fired_patterns[pat_key] = now
+                        memory_routing_sessions.pop(vkey, None)
                         break
 
         if trigger is None:
@@ -508,6 +556,22 @@ def main() -> None:
                 f"Session {sid} burned {tokens:,} tokens in a single turn. "
                 f"Comment on what this likely means about how that session is "
                 f"being used."
+            )
+
+        elif trigger == 'memory_id_collision':
+            mid      = trigger_data['id']
+            sessions = trigger_data['sessions']
+            prompt = (
+                f"Memory ID '{mid}' written in {len(sessions)} concurrent sessions "
+                f"({', '.join(sessions[:2])}). "
+                f"Which one owns it — or is one a stale retry?"
+            )
+
+        elif trigger == 'memory_routing_collision':
+            sessions = trigger_data['sessions']
+            prompt = (
+                f"UNR routing violation blocked in {len(sessions)} concurrent sessions. "
+                f"Systemic — check CLAUDE.md routing rule or template."
             )
 
         else:
