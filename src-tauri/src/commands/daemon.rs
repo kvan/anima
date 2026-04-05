@@ -249,7 +249,7 @@ pub(crate) async fn call_claude(prompt: String, model: &str, extra_args: &[&str]
                 if s.is_empty() || s == "SKIP" { None } else { Some(s) }
             } else {
                 let e = String::from_utf8_lossy(&out.stderr);
-                eprintln!("[daemon] claude rc={} stderr={}", out.status, &e[..e.len().min(120)]);
+                eprintln!("[daemon] claude rc={} stderr={}", out.status, e.chars().take(120).collect::<String>());
                 None
             }
         }
@@ -296,8 +296,6 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
         }
 
         if new_entries.is_empty() { continue; }
-
-        println!("[daemon] ── tick: {} new entries ──", new_entries.len());
 
         // ── Process events (always runs — never gated by commentary_busy) ────
         let now = now_s();
@@ -377,18 +375,18 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
         if !claude_ok { continue; }
         // commentary_busy only gates commentary spawns below — never skips event processing above
         let busy = shared.commentary_busy.load(Ordering::Relaxed);
-        println!("[daemon] busy={busy} tools_this_tick={tools_this_tick} tc_batch={} tool_sids={}", tc_batch.len(), tool_sids.len());
 
         // ── Mid-turn commentary (tool_use burst without turn_complete) ────────
         // When Claude is mid-turn doing many tools, don't wait for turn_complete.
         if !busy && tools_this_tick >= MID_TURN_TOOL_CNT && tc_batch.is_empty() {
             // Pick the session with the most recent activity
             if let Some(mid_sid) = tool_sids.iter().next().cloned() {
-                let since = {
+                let (since, global_since) = {
                     let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
-                    now - st.last_comment_per.get(&mid_sid).copied().unwrap_or(0.0)
+                    (now - st.last_comment_per.get(&mid_sid).copied().unwrap_or(0.0),
+                     now - st.last_comment_ts)
                 };
-                if since >= TURN_COOLDOWN_S {
+                if since >= TURN_COOLDOWN_S && global_since >= COOLDOWN_S {
                     let (recent_acts, persona) = {
                         let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
                         let acts: Vec<(String, String)> = st.recent_activity.get(&mid_sid)
@@ -416,9 +414,12 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
         }
 
         if busy {
-            println!("[daemon] tick skipped — commentary_busy");
             continue;
         }
+
+        // ── Global cooldown gate (applies to turn_complete, patterns, activity) ──
+        let last_global = { shared.state.lock().unwrap_or_else(|e| e.into_inner()).last_comment_ts };
+        if (now - last_global) < COOLDOWN_S { continue; }
 
         // ── Turn-complete commentary (per-session cooldown) ──────────────────
         for (tc_sid, tc_entry) in &tc_batch {
@@ -427,7 +428,6 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
                 now - st.last_comment_per.get(tc_sid).copied().unwrap_or(0.0)
             };
             if since < TURN_COOLDOWN_S {
-                println!("[daemon] turn_complete skip: per-session cooldown ({since:.1}s < {TURN_COOLDOWN_S})");
                 continue;
             }
 
@@ -439,8 +439,10 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
                     .unwrap_or_default();
                 (acts, build_persona(&st.recent_actions))
             };
-            if recent_acts.is_empty() {
-                println!("[daemon] turn_complete skip: recent_acts empty for {tc_sid}");
+            // turn_complete always fires if it has turn_text or user_msg — don't require recent_activity
+            let has_text = tc_entry["turn_text"].as_str().map(|s| !s.is_empty()).unwrap_or(false)
+                        || tc_entry["user_msg"].as_str().map(|s| !s.is_empty()).unwrap_or(false);
+            if recent_acts.is_empty() && !has_text {
                 continue;
             }
 
@@ -461,10 +463,8 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
         }
         if shared.commentary_busy.load(Ordering::Relaxed) { continue; }
 
-        // ── Pattern triggers (global cooldown) ───────────────────────────────
-        let last_global = { shared.state.lock().unwrap_or_else(|e| e.into_inner()).last_comment_ts };
-        println!("[daemon] global cooldown: {:.1}s since last (need >{COOLDOWN_S})", now - last_global);
-        if (now - last_global) > COOLDOWN_S {
+        // ── Pattern triggers ─────────────────────────────────────────────────
+        {
             let trigger_opt = {
                 let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
                 tool_sids.iter().find_map(|sid| {
@@ -488,7 +488,7 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
             }
 
             // ── Activity tick ─────────────────────────────────────────────────
-            let (tools_since, summary_parts, persona) = {
+            let (tools_since, summary_parts, convo_context, persona) = {
                 let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
                 let parts: Vec<String> = st.recent_activity.iter().filter_map(|(sid, acts)| {
                     let filtered: Vec<&ActEntry> = acts.iter()
@@ -498,7 +498,17 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
                         .collect();
                     if recent.is_empty() { None } else { Some(format!("[{sid}] {}", recent.join(" → "))) }
                 }).collect();
-                (st.tools_since, parts, build_persona(&st.recent_actions))
+                // Grab most recent conversation turn for context
+                let convo = st.session_convo.values()
+                    .filter_map(|turns| turns.back())
+                    .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(_, um, tt)| {
+                        let mut c = String::new();
+                        if !um.is_empty() { c.push_str(&format!("USER: {}", um.chars().take(200).collect::<String>())); }
+                        if !tt.is_empty() { if !c.is_empty() { c.push('\n'); } c.push_str(&format!("CLAUDE: {}", tt.chars().take(300).collect::<String>())); }
+                        c
+                    }).unwrap_or_default();
+                (st.tools_since, parts, convo, build_persona(&st.recent_actions))
             };
 
             if tools_since >= ACTIVITY_TRIGGER_CNT {
@@ -508,7 +518,10 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
                         st.tools_since = 0;
                         st.last_comment_ts = now;
                     }
-                    let data = serde_json::json!({"summary": summary_parts.join("; ")});
+                    let mut data = serde_json::json!({"summary": summary_parts.join("; ")});
+                    if !convo_context.is_empty() {
+                        data["convo"] = serde_json::Value::String(convo_context);
+                    }
                     shared.commentary_busy.store(true, Ordering::Relaxed);
                     let sh = shared.clone();
                     tokio::spawn(commentary_worker("session_activity".into(), data, persona, sh));

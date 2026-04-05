@@ -246,8 +246,8 @@ pub(crate) async fn run_oracle(
     }) {
         let last2: Vec<&ConvoEntry> = turns.iter().rev().take(2).collect::<Vec<_>>().into_iter().rev().collect();
         for (_, um, tt) in last2 {
-            if !um.is_empty() { convo_lines.push(format!("USER: {}", &um[..um.len().min(300)])); }
-            if !tt.is_empty() { convo_lines.push(format!("CLAUDE: {}", &tt[..tt.len().min(600)])); }
+            if !um.is_empty() { convo_lines.push(format!("USER: {}", um.chars().take(300).collect::<String>())); }
+            if !tt.is_empty() { convo_lines.push(format!("CLAUDE: {}", tt.chars().take(600).collect::<String>())); }
         }
     }
 
@@ -328,6 +328,6 @@ pub async fn oracle_query(
     let reply = run_oracle(message, history, sessions, ra_snap, cv_snap, commentary_snap, &state.oracle).await
         .ok_or_else(|| "oracle unreachable".to_string())?;
 
-    println!("[oracle] query → \"{}\"", &reply[..reply.len().min(80)]);
+    println!("[oracle] query → \"{}\"", reply.chars().take(80).collect::<String>());
     Ok(serde_json::json!({"msg": reply, "req_id": req_id}))
 }

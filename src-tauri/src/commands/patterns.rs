@@ -180,7 +180,16 @@ pub(crate) fn build_prompt(trigger: &str, data: &Value) -> Option<String> {
         }
         "session_activity" => {
             let summary = data["summary"].as_str().unwrap_or("");
-            Some(format!("Active across sessions: {summary}. What's the common thread?"))
+            let convo   = data["convo"].as_str().unwrap_or("");
+            let convo_block = if convo.is_empty() { String::new() }
+                else { format!("\n<recent_conversation>\n{convo}\n</recent_conversation>\n") };
+            Some(format!(
+                "Tool activity: {summary}.{convo_block}\n\
+                Write the next line for the companion. Comment on what the user is DOING — \
+                the task, the approach, the intent. NOT what the project contains or what features exist. \
+                Never reference things the user hasn't mentioned. Under 20 words. \
+                If you have nothing genuinely additive to say, output exactly: SKIP"
+            ))
         }
         "mid_turn_activity" => {
             let tc   = data["tool_count"].as_u64().unwrap_or(0);
@@ -192,7 +201,8 @@ pub(crate) fn build_prompt(trigger: &str, data: &Value) -> Option<String> {
             Some(format!(
                 "Mid-turn: {steps} ({tc} tools so far, still going).\n\n\
                 Write the next line for the companion. React to what Claude is doing RIGHT NOW — \
-                the direction, pace, or intent behind the current burst. Under 20 words. \
+                the direction, pace, or intent behind the current burst. \
+                Never invent context you can't see. Under 20 words. \
                 If nothing genuinely additive, output exactly: SKIP"
             ))
         }
@@ -212,7 +222,7 @@ pub(crate) async fn commentary_worker(trigger: String, data: Value, persona: Str
 
     if let Some(msg) = msg {
         if reporting_mode() != "dev" && is_internal(&msg) {
-            println!("[daemon] suppressed internal ref: \"{}\"", &msg[..msg.len().min(80)]);
+            println!("[daemon] suppressed internal ref: \"{}\"", msg.chars().take(80).collect::<String>());
         } else {
             append_out(&msg).await;
             // Share with oracle chat so direct conversations know what "we" said
@@ -233,7 +243,7 @@ pub(crate) async fn commentary_worker(trigger: String, data: Value, persona: Str
             } else {
                 if let Ok(mut st) = shared.state.lock() { st.last_comment_ts = now_s(); }
             }
-            println!("[daemon] {trigger} → \"{}\"", &msg[..msg.len().min(80)]);
+            println!("[daemon] {trigger} → \"{}\"", msg.chars().take(80).collect::<String>());
         }
     }
     shared.commentary_busy.store(false, std::sync::atomic::Ordering::Relaxed);

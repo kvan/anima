@@ -27,6 +27,11 @@ const INTERNAL_TOOLS = new Set([
 function isInternalTool(name) {
   return name.startsWith('mcp__') || INTERNAL_TOOLS.has(name);
 }
+function isFeedVisible(name) {
+  // MCP tools are real user activity — emit to feed for daemon commentary.
+  // Only truly internal tools (task management, plan mode, etc.) are hidden from feed.
+  return !INTERNAL_TOOLS.has(name);
+}
 
 export function setStatus(id, status) {
   const s = sessions.get(id);
@@ -187,8 +192,8 @@ export function handleEvent(id, event) {
           const input = typeof b.input === 'object'
             ? JSON.stringify(b.input, null, 2)
             : String(b.input || '');
-          if (!isInternalTool(b.name)) {
-            // Compute hint + file path for ALL non-internal tools — feed needs this for proactive commentary
+          // Feed emission: ALL non-internal tools including MCP — daemon needs this for commentary
+          if (isFeedVisible(b.name)) {
             const hint = toolHint(b.name, input);
             let filePath = null;
             try { const inp = JSON.parse(input); filePath = inp.file_path || inp.path || null; } catch (_) {}
@@ -196,9 +201,10 @@ export function handleEvent(id, event) {
               pxLog('TOOL-IN', `id:${id.slice(0,8)} ${b.name} → ${hint.slice(0,80)}`);
               s._workingPhase = hint; updateCursorPhase(hint);
             }
-            // Always feed tool_use with context — daemon needs this for pattern detection
             appendVexilFeed({ type: 'tool_use', session_id: id.slice(0, 8), tool: b.name, hint: (hint || '').slice(0, 120), file: filePath, cwd: s.cwd });
-
+          }
+          // UI display: hide MCP + internal tools from message log
+          if (!isInternalTool(b.name)) {
             if (s._streamedToolIds?.has(b.id)) {
               // Already shown — backfill real input and re-render hint in DOM
               const data = sessionLogs.get(id);
