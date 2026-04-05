@@ -8,7 +8,7 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use super::daemon::{
-    call_claude, append_out, reporting_mode, now_s,
+    append_out, reporting_mode, now_s,
     load_buddy, load_companion, str_val, coalesce, buddy_traits,
     DaemonShared, DaemonState, ToolEntry,
 };
@@ -207,8 +207,8 @@ pub(crate) async fn commentary_worker(trigger: String, data: Value, persona: Str
         shared.commentary_busy.store(false, std::sync::atomic::Ordering::Relaxed);
         return;
     };
-    let full = format!("{persona}\n\n{body}");
-    let msg  = call_claude(full, "claude-sonnet-4-6", &[], 30, &shared.sem).await;
+    // Use persistent commentary subprocess (~1.5-2s) instead of cold call_claude (~8s)
+    let msg = shared.commentary.query(&body, &persona, 30).await;
 
     if let Some(msg) = msg {
         if reporting_mode() != "dev" && is_internal(&msg) {

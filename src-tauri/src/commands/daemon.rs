@@ -25,13 +25,13 @@ use tokio::time::sleep;
 // ── Loop constants ────────────────────────────────────────────────────────────
 
 const POLL_MS:               u64 = 400;
-const COOLDOWN_S:            f64 = 12.0;
+const COOLDOWN_S:            f64 = 6.0;
 const TURN_COOLDOWN_S:       f64 = 4.0;
 const TOKEN_BLOAT_THRESHOLD: u64 = 80_000;
 const FIRED_PATTERN_TTL_S:   f64 = 300.0;
-const ACTIVITY_TRIGGER_CNT:  u32 = 5;
+const ACTIVITY_TRIGGER_CNT:  u32 = 4;
 const ACTIVITY_RECENCY_S:    f64 = 90.0;
-const MID_TURN_TOOL_CNT:     u32 = 4;   // comment mid-turn after N tool_use events
+const MID_TURN_TOOL_CNT:     u32 = 2;   // comment mid-turn after N tool_use events per tick
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,6 +66,7 @@ pub struct DaemonShared {
     pub sem:             Arc<Semaphore>,
     pub commentary_busy: Arc<AtomicBool>,
     pub oracle:          Arc<super::oracle::OraclePool>,
+    pub commentary:      Arc<super::oracle::OraclePool>,
 }
 
 impl DaemonShared {
@@ -80,7 +81,8 @@ impl DaemonShared {
             state:           Arc::new(Mutex::new(initial)),
             sem:             Arc::new(Semaphore::new(2)),
             commentary_busy: Arc::new(AtomicBool::new(false)),
-            oracle:          super::oracle::OraclePool::new(),
+            oracle:          super::oracle::OraclePool::new("claude-haiku-4-5-20251001", 0, "oracle"),
+            commentary:      super::oracle::OraclePool::new("claude-sonnet-4-6", 8, "commentary"),
         })
     }
 }
@@ -271,9 +273,10 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
 
     let claude_ok = check_claude_path().await;
 
-    // Spawn persistent oracle subprocess (cold start ~10s, then ~1-2s per query)
+    // Spawn persistent subprocesses (cold start ~10s each, then ~1-2s per query)
     if claude_ok {
         shared.oracle.spawn().await;
+        shared.commentary.spawn().await;
     }
 
     loop {
@@ -292,6 +295,8 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
         }
 
         if new_entries.is_empty() { continue; }
+
+        println!("[daemon] ── tick: {} new entries ──", new_entries.len());
 
         // ── Process events (always runs — never gated by commentary_busy) ────
         let now = now_s();
@@ -371,6 +376,7 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
         if !claude_ok { continue; }
         // commentary_busy only gates commentary spawns below — never skips event processing above
         let busy = shared.commentary_busy.load(Ordering::Relaxed);
+        println!("[daemon] busy={busy} tools_this_tick={tools_this_tick} tc_batch={} tool_sids={}", tc_batch.len(), tool_sids.len());
 
         // ── Mid-turn commentary (tool_use burst without turn_complete) ────────
         // When Claude is mid-turn doing many tools, don't wait for turn_complete.
@@ -408,7 +414,10 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
             }
         }
 
-        if busy { continue; }
+        if busy {
+            println!("[daemon] tick skipped — commentary_busy");
+            continue;
+        }
 
         // ── Turn-complete commentary (per-session cooldown) ──────────────────
         for (tc_sid, tc_entry) in &tc_batch {
@@ -416,7 +425,10 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
                 let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
                 now - st.last_comment_per.get(tc_sid).copied().unwrap_or(0.0)
             };
-            if since < TURN_COOLDOWN_S { continue; }
+            if since < TURN_COOLDOWN_S {
+                println!("[daemon] turn_complete skip: per-session cooldown ({since:.1}s < {TURN_COOLDOWN_S})");
+                continue;
+            }
 
             let (recent_acts, persona) = {
                 let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -426,7 +438,10 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
                     .unwrap_or_default();
                 (acts, build_persona(&st.recent_actions))
             };
-            if recent_acts.is_empty() { continue; }
+            if recent_acts.is_empty() {
+                println!("[daemon] turn_complete skip: recent_acts empty for {tc_sid}");
+                continue;
+            }
 
             let act_json: Vec<Value> = recent_acts.iter().rev().take(4).rev()
                 .map(|(t, h)| serde_json::json!([t, h])).collect();
@@ -447,6 +462,7 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
 
         // ── Pattern triggers (global cooldown) ───────────────────────────────
         let last_global = { shared.state.lock().unwrap_or_else(|e| e.into_inner()).last_comment_ts };
+        println!("[daemon] global cooldown: {:.1}s since last (need >{COOLDOWN_S})", now - last_global);
         if (now - last_global) > COOLDOWN_S {
             let trigger_opt = {
                 let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());

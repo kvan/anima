@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -25,15 +26,23 @@ struct OracleProc {
 }
 
 pub struct OraclePool {
-    proc:   TokioMutex<Option<OracleProc>>,
-    ready:  Notify,
+    proc:        TokioMutex<Option<OracleProc>>,
+    ready:       Notify,
+    model:       String,
+    query_count: AtomicU32,
+    max_queries: u32,       // 0 = no auto-respawn
+    label:       &'static str,
 }
 
 impl OraclePool {
-    pub fn new() -> Arc<Self> {
+    pub fn new(model: &str, max_queries: u32, label: &'static str) -> Arc<Self> {
         Arc::new(Self {
-            proc:  TokioMutex::new(None),
-            ready: Notify::new(),
+            proc:        TokioMutex::new(None),
+            ready:       Notify::new(),
+            model:       model.to_string(),
+            query_count: AtomicU32::new(0),
+            max_queries,
+            label,
         })
     }
 
@@ -41,8 +50,9 @@ impl OraclePool {
     pub async fn spawn(&self) {
         if let Some(op) = self.try_spawn().await {
             *self.proc.lock().await = Some(op);
+            self.query_count.store(0, Ordering::Relaxed);
             self.ready.notify_waiters();
-            println!("[oracle] persistent subprocess ready");
+            println!("[{}] persistent subprocess ready (model={})", self.label, self.model);
         }
     }
 
@@ -53,12 +63,10 @@ impl OraclePool {
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--verbose",
-            "--model", "claude-haiku-4-5-20251001",
+            "--model", &self.model,
             "--no-session-persistence",
             "--permission-mode", "default",
             "--settings", r#"{"hooks":{}}"#,
-            // No --system-prompt here — personality is injected per-query via
-            // build_oracle_system() so it stays current as sessions change.
         ]);
         cmd.stdin(std::process::Stdio::piped())
            .stdout(std::process::Stdio::piped())
@@ -66,7 +74,7 @@ impl OraclePool {
 
         let mut child = match cmd.spawn() {
             Ok(c)  => c,
-            Err(e) => { eprintln!("[oracle] spawn error: {e}"); return None; }
+            Err(e) => { eprintln!("[{}] spawn error: {e}", self.label); return None; }
         };
 
         let stdout = child.stdout.take()?;
@@ -118,7 +126,7 @@ impl OraclePool {
 
         // Write to stdin
         if op.stdin.write_all(line.as_bytes()).await.is_err() {
-            eprintln!("[oracle] stdin write failed — process dead, will respawn");
+            eprintln!("[{}] stdin write failed — process dead, will respawn", self.label);
             *guard = None;
             return None;
         }
@@ -129,29 +137,39 @@ impl OraclePool {
 
         // Read until we get a "result" event
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
-        loop {
+        let result = loop {
             match tokio::time::timeout_at(deadline, op.rx.recv()).await {
                 Err(_) => {
-                    eprintln!("[oracle] query timeout ({timeout_secs}s)");
-                    return None;
+                    eprintln!("[{}] query timeout ({timeout_secs}s)", self.label);
+                    break None;
                 }
                 Ok(None) => {
-                    eprintln!("[oracle] subprocess stdout closed — will respawn");
+                    eprintln!("[{}] subprocess stdout closed — will respawn", self.label);
                     *guard = None;
-                    return None;
+                    break None;
                 }
                 Ok(Some(line)) => {
                     if let Ok(evt) = serde_json::from_str::<Value>(&line) {
                         if evt["type"].as_str() == Some("result") {
-                            let result = evt["result"].as_str().unwrap_or("").trim().to_string();
-                            if result.is_empty() || result == "SKIP" { return None; }
-                            return Some(result);
+                            let r = evt["result"].as_str().unwrap_or("").trim().to_string();
+                            if r.is_empty() || r == "SKIP" { break None; }
+                            break Some(r);
                         }
-                        // Skip other event types (system, assistant, content_block_*, rate_limit_event)
                     }
                 }
             }
+        };
+
+        // Auto-respawn after max_queries to bound context accumulation
+        if self.max_queries > 0 {
+            let n = self.query_count.fetch_add(1, Ordering::Relaxed) + 1;
+            if n >= self.max_queries {
+                println!("[{}] respawning after {} queries (context hygiene)", self.label, n);
+                *guard = None; // next query triggers fresh spawn
+            }
         }
+
+        result
     }
 }
 
