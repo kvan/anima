@@ -15,6 +15,7 @@
   flex-shrink: 0;
   height: 60px; /* 5 lines × 12px — fixed so bio row never shifts height between frames */
   overflow: hidden;
+  position: relative; /* anchor for oracle-view-btn */
 }
 
 .vexil-ascii-art {

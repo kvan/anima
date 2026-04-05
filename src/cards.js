@@ -8,7 +8,7 @@ import {
   rollFamiliarBones, incrementFamiliarReroll,
 } from './session.js';
 import { getNimBalance, spendNim, REROLL_NIM_COST } from './nim.js';
-import { renderFrame } from './ascii-sprites.js';
+import { renderFrame, EYE_CHARS, DEFAULT_EYE } from './ascii-sprites.js';
 import { killSession, IDLE_STALE_MS } from './session-lifecycle.js';
 import { renderMessageLog, updateWorkingCursor, setPinToBottom } from './messages.js';
 
@@ -28,72 +28,59 @@ const _EYE_LABELS = {
 
 let _profileCardEl = null;
 let _profileAnimId = null;
+let _oracleCardEl  = null;
+let _oracleAnimId  = null;
 
-export function showFamiliarCard(sessionId) {
-  const s = sessions.get(sessionId);
-  if (!s?.familiar) return;
-  hideFamiliarCard();
+// ── Shared stat-card builder ─────────────────────────────
+// Returns { overlay, card, spritePre, footer } — caller attaches to DOM and wires animation.
 
-  const f = s.familiar;
-  const rarityColor = _RARITY_COLORS[f.rarity] ?? '#555';
-  const stars = _RARITY_STARS[f.rarity] ?? '★';
-  const eyeLabel = _EYE_LABELS[f.eye] ?? f.eye;
-  const hue = s.familiarHue ?? '#FFDD44';
+function _buildCardContent(opts, onDismiss) {
+  const rarity = (opts.rarity ?? 'common').toLowerCase();
+  const rarityColor = _RARITY_COLORS[rarity] ?? '#555';
+  const stars = _RARITY_STARS[rarity] ?? '★';
+  const eyeLabel = _EYE_LABELS[opts.eye] ?? opts.eye;
 
-  // ── Overlay
   const overlay = document.createElement('div');
   overlay.className = 'fc-overlay';
-  overlay.addEventListener('click', e => { if (e.target === overlay) hideFamiliarCard(); });
+  overlay.addEventListener('click', e => { if (e.target === overlay) onDismiss(); });
 
-  // ── Card
   const card = document.createElement('div');
   card.className = 'fc-card';
   card.style.setProperty('--fc-rarity-color', rarityColor);
-  card.style.setProperty('--fc-hue', hue);
+  card.style.setProperty('--fc-hue', opts.hue);
 
-  // Header: species name left, rarity right
+  // Header
   const header = document.createElement('div');
   header.className = 'fc-header';
-
   const nameEl = document.createElement('div');
   nameEl.className = 'fc-species';
-  nameEl.textContent = (f.name ?? f.species).toUpperCase();
-
+  nameEl.textContent = (opts.name ?? opts.species).toUpperCase();
   const rarityEl = document.createElement('div');
   rarityEl.className = 'fc-rarity';
-  rarityEl.textContent = `${stars} ${f.rarity.toUpperCase()}`;
-
+  rarityEl.textContent = `${stars} ${rarity.toUpperCase()}`;
   const typeEl = document.createElement('div');
   typeEl.className = 'fc-type';
-  typeEl.textContent = `TYPE: ${f.species.toUpperCase()}`;
-
-  header.appendChild(nameEl);
-  header.appendChild(rarityEl);
-  header.appendChild(typeEl);
+  typeEl.textContent = `TYPE: ${opts.species.toUpperCase()}`;
+  header.append(nameEl, rarityEl, typeEl);
 
   // Body: 2-column (sprite | stats)
   const body = document.createElement('div');
   body.className = 'fc-body';
 
-  // Left column: sprite + meta
   const leftCol = document.createElement('div');
   leftCol.className = 'fc-left';
-
   const spritePre = document.createElement('pre');
   spritePre.className = 'fc-sprite familiar-pre';
-  spritePre.style.setProperty('--familiar-hue', hue);
-  spritePre.textContent = renderFrame(f.species, 0, f.eye, f.hat).join('\n');
+  spritePre.style.setProperty('--familiar-hue', opts.hue);
+  spritePre.textContent = renderFrame(opts.species, 0, opts.eye, opts.hat).join('\n');
   leftCol.appendChild(spritePre);
-
   const leftMeta = document.createElement('div');
   leftMeta.className = 'fc-left-meta';
-  leftMeta.textContent = `${f.eye}  ${f.hat}`;
+  leftMeta.textContent = `${opts.eye}  ${opts.hat}`;
   leftCol.appendChild(leftMeta);
 
-  // Right column: stats
   const rightCol = document.createElement('div');
   rightCol.className = 'fc-right';
-
   const statsLabel = document.createElement('div');
   statsLabel.className = 'fc-stats-label';
   statsLabel.textContent = 'POWER RATINGS';
@@ -101,53 +88,68 @@ export function showFamiliarCard(sessionId) {
 
   const statsDiv = document.createElement('div');
   statsDiv.className = 'fc-stats';
-
-  for (const [statName, val] of Object.entries(f.stats)) {
+  const scale = opts.statScale ?? 1;
+  for (const [statName, val] of Object.entries(opts.stats)) {
     const row = document.createElement('div');
     row.className = 'fc-stat-row';
-
     const label = document.createElement('span');
     label.className = 'fc-stat-name';
     label.textContent = statName;
-
     const barWrap = document.createElement('div');
     barWrap.className = 'fc-stat-bar';
     const fill = document.createElement('div');
     fill.className = 'fc-stat-fill';
-    fill.style.width = `${val}%`;
+    fill.style.width = `${val * scale}%`;
     barWrap.appendChild(fill);
-
     const numEl = document.createElement('span');
     numEl.className = 'fc-stat-val';
     numEl.textContent = val;
-
-    row.appendChild(label);
-    row.appendChild(barWrap);
-    row.appendChild(numEl);
+    row.append(label, barWrap, numEl);
     statsDiv.appendChild(row);
   }
   rightCol.appendChild(statsDiv);
 
   const rightMeta = document.createElement('div');
   rightMeta.className = 'fc-right-meta';
-  rightMeta.textContent = `${f.species} · ${eyeLabel} eye · ${f.hat} hat`;
+  rightMeta.textContent = `${opts.species} · ${eyeLabel} eye · ${opts.hat} hat`;
   rightCol.appendChild(rightMeta);
 
-  body.appendChild(leftCol);
-  body.appendChild(rightCol);
+  body.append(leftCol, rightCol);
 
-  // Footer: shiny badge + Phase 3 re-roll slot
+  // Footer: shiny badge (re-roll appended by caller if needed)
   const footer = document.createElement('div');
   footer.className = 'fc-footer';
-
   const shinyBadge = document.createElement('span');
-  shinyBadge.className = f.shiny ? 'fc-shiny fc-shiny--active' : 'fc-shiny';
+  shinyBadge.className = opts.shiny ? 'fc-shiny fc-shiny--active' : 'fc-shiny';
   shinyBadge.textContent = '✦ SHINY';
   footer.appendChild(shinyBadge);
 
+  card.append(header, body, footer);
+  overlay.appendChild(card);
+
+  const onKey = e => { if (e.key === 'Escape') onDismiss(); };
+
+  return { overlay, card, spritePre, footer, onKey };
+}
+
+// ── Familiar Profile Card ────────────────────────────────
+
+export function showFamiliarCard(sessionId) {
+  const s = sessions.get(sessionId);
+  if (!s?.familiar) return;
+  hideFamiliarCard();
+
+  const f = s.familiar;
+  const hue = s.familiarHue ?? '#FFDD44';
+  const { overlay, spritePre, footer, onKey } = _buildCardContent({
+    name: f.name ?? f.species, species: f.species, rarity: f.rarity,
+    eye: f.eye, hat: f.hat, shiny: f.shiny, stats: f.stats,
+    statScale: 1, hue,
+  }, hideFamiliarCard);
+
+  // Re-roll button (familiar-only)
   const rerollSlot = document.createElement('div');
   rerollSlot.className = 'fc-reroll-slot';
-
   const canAfford = REROLL_NIM_COST === 0 || getNimBalance() >= REROLL_NIM_COST;
   const rerollBtn = document.createElement('button');
   rerollBtn.className = 'fc-reroll-btn' + (canAfford ? '' : ' fc-reroll-btn--locked');
@@ -162,23 +164,15 @@ export function showFamiliarCard(sessionId) {
   rerollSlot.appendChild(rerollBtn);
   footer.appendChild(rerollSlot);
 
-  // Assemble
-  card.appendChild(header);
-  card.appendChild(body);
-  card.appendChild(footer);
-  overlay.appendChild(card);
   document.body.appendChild(overlay);
   _profileCardEl = overlay;
 
-  // Animate sprite at 500ms (~2 FPS)
   let frame = 0;
   _profileAnimId = setInterval(() => {
     frame = (frame + 1) % 3;
     spritePre.textContent = renderFrame(f.species, frame, f.eye, f.hat).join('\n');
   }, 500);
 
-  // Escape to close
-  const onKey = e => { if (e.key === 'Escape') hideFamiliarCard(); };
   document.addEventListener('keydown', onKey);
   overlay._keyHandler = onKey;
 }
@@ -194,6 +188,48 @@ export function hideFamiliarCard() {
   if (_profileAnimId !== null) {
     clearInterval(_profileAnimId);
     _profileAnimId = null;
+  }
+}
+
+// ── Oracle Companion Card ────────────────────────────────
+
+export function showOracleCard(buddy) {
+  if (!buddy) return;
+  hideOracleCard();
+
+  const eye = EYE_CHARS[buddy.eyes] ?? DEFAULT_EYE;
+  const species = buddy.species ?? 'duck';
+  const hat = buddy.hat ?? 'none';
+  const { overlay, spritePre, onKey } = _buildCardContent({
+    name: buddy.name ?? species, species, rarity: buddy.rarity ?? 'common',
+    eye, hat, shiny: buddy.shiny ?? false, stats: buddy.stats ?? {},
+    statScale: 10, hue: '#d87756',
+  }, hideOracleCard);
+
+  document.body.appendChild(overlay);
+  _oracleCardEl = overlay;
+
+  let frame = 0;
+  _oracleAnimId = setInterval(() => {
+    frame = (frame + 1) % 3;
+    spritePre.textContent = renderFrame(species, frame, eye, hat).join('\n');
+  }, 500);
+
+  document.addEventListener('keydown', onKey);
+  overlay._keyHandler = onKey;
+}
+
+export function hideOracleCard() {
+  if (_oracleCardEl) {
+    if (_oracleCardEl._keyHandler) {
+      document.removeEventListener('keydown', _oracleCardEl._keyHandler);
+    }
+    _oracleCardEl.remove();
+    _oracleCardEl = null;
+  }
+  if (_oracleAnimId !== null) {
+    clearInterval(_oracleAnimId);
+    _oracleAnimId = null;
   }
 }
 

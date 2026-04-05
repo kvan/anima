@@ -14,6 +14,7 @@
 
 import { SPRITE_DATA, getActiveSessionId } from './session.js';
 import { SPRITES, EYE_CHARS, DEFAULT_EYE, HATS, renderFrame } from './ascii-sprites.js';
+import { showOracleCard } from './cards.js';
 
 const { invoke } = window.__TAURI__.core;
 
@@ -224,6 +225,16 @@ function renderCompanionSprite() {
   pre.className = 'vexil-ascii-art';
   panel.appendChild(pre);
   _asciiPre = pre;
+
+  // "about me" hover button — opens oracle stat card
+  const viewBtn = document.createElement('button');
+  viewBtn.className = 'oracle-view-btn';
+  viewBtn.innerHTML = 'about<br>me';
+  viewBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showOracleCard(buddy);
+  });
+  panel.appendChild(viewBtn);
 
   // Render initial idle frame and start animation
   updateAsciiFrame(0);

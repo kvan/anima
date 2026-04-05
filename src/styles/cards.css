@@ -157,6 +157,30 @@ canvas.sprite-canvas {
   pointer-events: auto;
 }
 
+/* "about me" overlay — oracle companion in sidebar */
+.oracle-view-btn {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  border: none;
+  color: var(--companion-hue, #d87756);
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+#vexil-ascii:hover .oracle-view-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
 
 /* Overlay backdrop */
 .fc-overlay {
