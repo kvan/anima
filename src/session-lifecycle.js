@@ -9,7 +9,7 @@ import {
 } from './session.js';
 import { getBuddyTrigger, addToVexilLog } from './companion.js';
 import { getStagedAttachments, markAttachmentsSent, cleanupSession as cleanupAttachments } from './attachments.js';
-import { getSlashCommands, isBuiltinCommand } from './slash-menu.js';
+import { getSlashCommands, isBuiltinCommand, loadSlashCommands } from './slash-menu.js';
 import { pxLog } from './logger.js';
 
 const { Command } = window.__TAURI__.shell;
@@ -85,6 +85,8 @@ function createSession(cwd, opts = {}) {
 async function spawnClaude(id) {
   const s = sessions.get(id);
   if (!s) return;
+  // Refresh slash commands from disk — picks up new commands added since startup
+  loadSlashCommands().catch(() => {});
   pxLog('SPAWN', `id:${id.slice(0,8)} cwd:${s.cwd} model:${s._modelOverride||'default'} effort:${s._effortOverride||'default'} continue:${!!s._interrupted}`);
   try {
     // v0.1: bypassPermissions — no MCP gate needed, works on any machine.
@@ -193,13 +195,10 @@ function killSession(id) {
 
 
 function warnIfUnknownCommand(id, text) {
-  const m = text.match(/^\/([^\s\/]+)/);
-  if (!m) return false;
-  const name = m[1];
-  if (isBuiltinCommand(name)) return false;
-  if (_deps.slashCommands.find(c => c.name === name)) return false;
-  _deps.pushMessage(id, { type: 'warn', text: `Unknown command: /${name}` });
-  return true;
+  // Never block — unknown /commands pass through to Claude as text.
+  // Claude Code CLI handles native commands (/init, /mcp, /doctor, etc.)
+  // and Claude interprets custom ones from CLAUDE.md instructions.
+  return false;
 }
 
 async function expandSlashCommand(text) {

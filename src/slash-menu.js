@@ -7,6 +7,7 @@ const { invoke } = window.__TAURI__.core;
 let _slashCommands = [];    // loaded once on startup
 
 const BUILTIN_SLASH_COMMANDS = [
+  // Anima-handled (local)
   { name: 'clear', description: 'Clear conversation and restart session' },
   { name: 'cost', description: 'Show token usage for this session' },
   { name: 'compact', description: 'Summarize conversation to save context' },
@@ -15,6 +16,21 @@ const BUILTIN_SLASH_COMMANDS = [
   { name: 'effort', description: 'Set reasoning effort level' },
   { name: 'fallback', description: 'Set fallback model for overload (e.g., sonnet)' },
   { name: 'perf', description: 'Show performance stats (TTFT, tok/s, rate limits)' },
+  // Claude Code native (passed through to CLI)
+  { name: 'init', description: 'Initialize CLAUDE.md in the project' },
+  { name: 'add-dir', description: 'Add a directory to the session context' },
+  { name: 'mcp', description: 'Manage MCP servers' },
+  { name: 'permissions', description: 'View or change permission settings' },
+  { name: 'doctor', description: 'Diagnose Claude Code configuration issues' },
+  { name: 'status', description: 'Show session status and context' },
+  { name: 'review', description: 'Review recent code changes' },
+  { name: 'bug', description: 'Report a bug or issue' },
+  { name: 'terminal-setup', description: 'Configure terminal integration' },
+  { name: 'vim', description: 'Toggle vim keybindings' },
+  { name: 'config', description: 'View or update configuration' },
+  { name: 'login', description: 'Log in to your Anthropic account' },
+  { name: 'logout', description: 'Log out of your Anthropic account' },
+  { name: 'fast', description: 'Toggle fast mode (same model, faster output)' },
 ];
 let _slashActiveIdx = -1;   // keyboard-highlighted row
 let _activeToken   = null;  // token that opened the menu
@@ -58,7 +74,8 @@ export function showSlashMenu(token) {
     );
     prefix = '--';
   } else {
-    matches = _slashCommands.filter(c =>
+    const allCommands = [...BUILTIN_SLASH_COMMANDS, ..._slashCommands];
+    matches = allCommands.filter(c =>
       c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)
     );
     prefix = '/';

@@ -85,8 +85,8 @@ impl DaemonShared {
             state:           Arc::new(Mutex::new(initial)),
             sem:             Arc::new(Semaphore::new(2)),
             commentary_busy: Arc::new(AtomicBool::new(false)),
-            oracle:          super::oracle::OraclePool::new("claude-haiku-4-5-20251001", 0, "oracle"),
-            commentary:      super::oracle::OraclePool::new("claude-haiku-4-5-20251001", 12, "commentary"),
+            oracle:          super::oracle::OraclePool::new("claude-sonnet-4-6", 0, "oracle"),
+            commentary:      super::oracle::OraclePool::new("claude-sonnet-4-6", 12, "commentary"),
         })
     }
 }
