@@ -29,10 +29,10 @@ pub fn run() {
 
             ws_bridge::init(app)?;
 
-            // Custom menu — replaces "About pixel-terminal" with "About Pixel Claude"
+            // Custom menu — replaces default "About" with "About Anima"
             // and intercepts the About action to show our styled dialog.
-            let about_i = MenuItem::with_id(app, "about", "About Pixel Claude", true, None::<&str>)?;
-            let app_menu = Submenu::with_items(app, "Pixel Claude", true, &[
+            let about_i = MenuItem::with_id(app, "about", "About Anima", true, None::<&str>)?;
+            let app_menu = Submenu::with_items(app, "Anima", true, &[
                 &about_i,
                 &PredefinedMenuItem::separator(app)?,
                 &PredefinedMenuItem::services(app, None)?,

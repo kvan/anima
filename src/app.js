@@ -387,8 +387,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     event.preventDefault();
     const count = sessions.size;
     const msg = count > 0
-      ? `Close Pixel Terminal? ${count} session${count > 1 ? 's' : ''} will be terminated.`
-      : 'Close Pixel Terminal?';
+      ? `Close Anima? ${count} session${count > 1 ? 's' : ''} will be terminated.`
+      : 'Close Anima?';
     const ok = await showConfirm(msg);
     if (ok) {
       _forceClose = true;

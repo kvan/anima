@@ -464,7 +464,7 @@ async function pickFolder() {
 
     if (await isSelfDirectory(dir)) {
       const proceed = await showConfirm(
-        "This is Pixel Terminal's own source directory.\nEditing files here will crash all running sessions.\nProceed in read-only mode?",
+        "This is Anima's own source directory.\nEditing files here will crash all running sessions.\nProceed in read-only mode?",
         'proceed read-only'
       );
       if (!proceed) return;
