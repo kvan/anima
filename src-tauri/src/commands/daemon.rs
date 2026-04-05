@@ -25,7 +25,8 @@ use tokio::time::sleep;
 // ── Loop constants ────────────────────────────────────────────────────────────
 
 const POLL_MS:               u64 = 400;
-const COOLDOWN_S:            f64 = 6.0;
+const COOLDOWN_S:            f64 = 8.0;
+const RATE_LIMIT_BACKOFF_S:  f64 = 30.0;  // suppress commentary after user hits rate limit
 const TURN_COOLDOWN_S:       f64 = 4.0;
 const TOKEN_BLOAT_THRESHOLD: u64 = 80_000;
 const FIRED_PATTERN_TTL_S:   f64 = 300.0;
@@ -54,9 +55,11 @@ pub struct DaemonState {
     pub(crate) last_comment_ts: f64,
     pub(crate) last_comment_per: HashMap<String, f64>,
     pub(crate) tools_since:     u32,
+    pub(crate) first_commentary_fired: bool,
     pub(crate) tool_errors:     HashMap<String, Vec<String>>,
     pub(crate) recent_actions:  VecDeque<String>,
     pub(crate) recent_commentary: VecDeque<(f64, String)>, // (ts, msg) — shared with oracle chat
+    pub(crate) last_rate_limit_ts: f64,  // when user last hit rate limit — suppress commentary
     // Feed reader state
     pub(crate) feed_offset: u64,
     pub(crate) feed_inode:  u64,
@@ -278,6 +281,14 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
     if claude_ok {
         shared.oracle.spawn().await;
         shared.commentary.spawn().await;
+
+        // Warm up commentary in background — pay cold start before first trigger
+        let warm = shared.commentary.clone();
+        tokio::spawn(async move {
+            if let Some(_) = warm.query("Say OK.", "", 15).await {
+                println!("[commentary] warm-up complete");
+            }
+        });
     }
 
     loop {
@@ -348,9 +359,13 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
                     "tool_error"  => {
                         let tool  = entry["tool"].as_str().unwrap_or("?").to_string();
                         let error = entry["error"].as_str().unwrap_or("").to_string();
-                        let key   = format!("{}:{}", tool, &error[..error.len().min(40)]);
+                        let key   = format!("{}:{}", tool, error.chars().take(40).collect::<String>());
                         let sids  = st.tool_errors.entry(key).or_default();
                         if !sids.contains(&sid) { sids.push(sid); }
+                    }
+                    "rate_limit"  => {
+                        st.last_rate_limit_ts = now;
+                        println!("[daemon] rate_limit detected — suppressing commentary for {RATE_LIMIT_BACKOFF_S}s");
                     }
                     "token_bloat" => {
                         let tok = entry["tokens"].as_u64().unwrap_or(0);
@@ -381,12 +396,13 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
         if !busy && tools_this_tick >= MID_TURN_TOOL_CNT && tc_batch.is_empty() {
             // Pick the session with the most recent activity
             if let Some(mid_sid) = tool_sids.iter().next().cloned() {
-                let (since, global_since) = {
+                let (since, global_since, rl_since) = {
                     let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
                     (now - st.last_comment_per.get(&mid_sid).copied().unwrap_or(0.0),
-                     now - st.last_comment_ts)
+                     now - st.last_comment_ts,
+                     now - st.last_rate_limit_ts)
                 };
-                if since >= TURN_COOLDOWN_S && global_since >= COOLDOWN_S {
+                if since >= TURN_COOLDOWN_S && global_since >= COOLDOWN_S && rl_since >= RATE_LIMIT_BACKOFF_S {
                     let (recent_acts, persona) = {
                         let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
                         let acts: Vec<(String, String)> = st.recent_activity.get(&mid_sid)
@@ -418,8 +434,13 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
         }
 
         // ── Global cooldown gate (applies to turn_complete, patterns, activity) ──
-        let last_global = { shared.state.lock().unwrap_or_else(|e| e.into_inner()).last_comment_ts };
+        let (last_global, last_rl) = {
+            let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
+            (st.last_comment_ts, st.last_rate_limit_ts)
+        };
         if (now - last_global) < COOLDOWN_S { continue; }
+        // Back off commentary when user is rate-limited — don't compete for API budget
+        if (now - last_rl) < RATE_LIMIT_BACKOFF_S { continue; }
 
         // ── Turn-complete commentary (per-session cooldown) ──────────────────
         for (tc_sid, tc_entry) in &tc_batch {
@@ -511,12 +532,18 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
                 (st.tools_since, parts, convo, build_persona(&st.recent_actions))
             };
 
-            if tools_since >= ACTIVITY_TRIGGER_CNT {
+            // First commentary fires on 1 tool (fast engagement); subsequent need 2
+            let threshold = {
+                let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
+                if st.first_commentary_fired { ACTIVITY_TRIGGER_CNT } else { 1 }
+            };
+            if tools_since >= threshold {
                 if !summary_parts.is_empty() {
                     {
                         let mut st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
                         st.tools_since = 0;
                         st.last_comment_ts = now;
+                        st.first_commentary_fired = true;
                     }
                     let mut data = serde_json::json!({"summary": summary_parts.join("; ")});
                     if !convo_context.is_empty() {
