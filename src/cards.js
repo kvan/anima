@@ -117,13 +117,15 @@ function _buildCardContent(opts, onDismiss) {
 
   body.append(leftCol, rightCol);
 
-  // Footer: shiny badge (re-roll appended by caller if needed)
+  // Footer: shiny badge only if actually shiny (re-roll appended by caller if needed)
   const footer = document.createElement('div');
   footer.className = 'fc-footer';
-  const shinyBadge = document.createElement('span');
-  shinyBadge.className = opts.shiny ? 'fc-shiny fc-shiny--active' : 'fc-shiny';
-  shinyBadge.textContent = '✦ SHINY';
-  footer.appendChild(shinyBadge);
+  if (opts.shiny) {
+    const shinyBadge = document.createElement('span');
+    shinyBadge.className = 'fc-shiny';
+    shinyBadge.textContent = '✦ SHINY';
+    footer.appendChild(shinyBadge);
+  }
 
   card.append(header, body, footer);
   overlay.appendChild(card);
@@ -207,14 +209,13 @@ export function showOracleCard(buddy) {
     statScale: 10, hue: '#d87756',
   }, hideOracleCard);
 
-  // ── Commentary frequency control ───────────────────────
+  // ── Commentary frequency buttons ────────────────────────
   const freqRow = document.createElement('div');
   freqRow.className = 'fc-freq-row';
   const freqLabel = document.createElement('span');
   freqLabel.className = 'fc-freq-label';
   freqLabel.textContent = 'COMMENTARY';
   freqRow.appendChild(freqLabel);
-
   const levels = ['quiet', 'normal', 'chatty'];
   const current = buddy.commentaryFrequency ?? 'normal';
   for (const lvl of levels) {
@@ -228,7 +229,7 @@ export function showOracleCard(buddy) {
     });
     freqRow.appendChild(btn);
   }
-  footer.insertBefore(freqRow, footer.firstChild);
+  footer.appendChild(freqRow);
 
   document.body.appendChild(overlay);
   _oracleCardEl = overlay;
