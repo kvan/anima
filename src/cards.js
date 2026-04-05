@@ -9,6 +9,7 @@ import {
 } from './session.js';
 import { getNimBalance, spendNim, REROLL_NIM_COST } from './nim.js';
 import { renderFrame, EYE_CHARS, DEFAULT_EYE } from './ascii-sprites.js';
+import { companionBuddy, saveCommentaryFrequency } from './companion.js';
 import { killSession, IDLE_STALE_MS } from './session-lifecycle.js';
 import { renderMessageLog, updateWorkingCursor, setPinToBottom } from './messages.js';
 
@@ -200,11 +201,34 @@ export function showOracleCard(buddy) {
   const eye = EYE_CHARS[buddy.eyes] ?? DEFAULT_EYE;
   const species = buddy.species ?? 'duck';
   const hat = buddy.hat ?? 'none';
-  const { overlay, spritePre, onKey } = _buildCardContent({
+  const { overlay, card, spritePre, footer, onKey } = _buildCardContent({
     name: buddy.name ?? species, species, rarity: buddy.rarity ?? 'common',
     eye, hat, shiny: buddy.shiny ?? false, stats: buddy.stats ?? {},
     statScale: 10, hue: '#d87756',
   }, hideOracleCard);
+
+  // ── Commentary frequency control ───────────────────────
+  const freqRow = document.createElement('div');
+  freqRow.className = 'fc-freq-row';
+  const freqLabel = document.createElement('span');
+  freqLabel.className = 'fc-freq-label';
+  freqLabel.textContent = 'COMMENTARY';
+  freqRow.appendChild(freqLabel);
+
+  const levels = ['quiet', 'normal', 'chatty'];
+  const current = buddy.commentaryFrequency ?? 'normal';
+  for (const lvl of levels) {
+    const btn = document.createElement('button');
+    btn.className = 'fc-freq-btn' + (lvl === current ? ' fc-freq-btn--active' : '');
+    btn.textContent = lvl.toUpperCase();
+    btn.addEventListener('click', () => {
+      freqRow.querySelectorAll('.fc-freq-btn').forEach(b => b.classList.remove('fc-freq-btn--active'));
+      btn.classList.add('fc-freq-btn--active');
+      saveCommentaryFrequency(lvl);
+    });
+    freqRow.appendChild(btn);
+  }
+  footer.insertBefore(freqRow, footer.firstChild);
 
   document.body.appendChild(overlay);
   _oracleCardEl = overlay;

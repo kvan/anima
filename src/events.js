@@ -203,6 +203,19 @@ export function handleEvent(id, event) {
             }
             appendVexilFeed({ type: 'tool_use', session_id: id.slice(0, 8), tool: b.name, hint: (hint || '').slice(0, 120), file: filePath, cwd: s.cwd });
           }
+          // Sequential thinking: surface progress in session log
+          if (b.name === 'mcp__sequential-thinking__sequentialthinking') {
+            s._seqThinkCount = (s._seqThinkCount || 0) + 1;
+            const stepLabel = s._seqThinkCount === 1
+              ? '⟳ reasoning…'
+              : `⟳ reasoning · step ${s._seqThinkCount}`;
+            if (s._seqThinkEl && getActiveSessionId() === id) {
+              const label = s._seqThinkEl.querySelector('.system-label');
+              if (label) label.textContent = stepLabel;
+            } else {
+              s._seqThinkEl = pushMessage(id, { type: 'system-msg', text: stepLabel });
+            }
+          }
           // UI display: hide MCP + internal tools from message log
           if (!isInternalTool(b.name)) {
             if (s._streamedToolIds?.has(b.id)) {
@@ -355,6 +368,8 @@ export function handleEvent(id, event) {
         s._vexilTurn = false;
         s._confirmedVexil = false;
         s._turnToolCount = 0;
+        s._seqThinkCount = 0;
+        s._seqThinkEl = null;
         setStatus(id, 'idle');
         if (getActiveSessionId() !== id) {
           s.unread = true;

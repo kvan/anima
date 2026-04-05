@@ -26,7 +26,7 @@ use tokio::time::sleep;
 
 const POLL_MS:               u64 = 400;
 const COOLDOWN_S:            f64 = 8.0;
-const RATE_LIMIT_BACKOFF_S:  f64 = 30.0;  // suppress commentary after user hits rate limit
+const RATE_LIMIT_BACKOFF_S:  f64 = 15.0;  // suppress commentary after user hits rate limit
 const TURN_COOLDOWN_S:       f64 = 4.0;
 const TOKEN_BLOAT_THRESHOLD: u64 = 80_000;
 const FIRED_PATTERN_TTL_S:   f64 = 300.0;
@@ -434,11 +434,19 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
         }
 
         // ── Global cooldown gate (applies to turn_complete, patterns, activity) ──
+        // Commentary frequency from buddy.json: quiet=2x cooldown, normal=1x, chatty=0.5x
+        let freq_multiplier = match load_buddy().get("commentaryFrequency")
+            .and_then(|v| v.as_str()).unwrap_or("normal") {
+            "quiet"  => 2.0,
+            "chatty" => 0.5,
+            _        => 1.0,
+        };
+        let effective_cooldown = COOLDOWN_S * freq_multiplier;
         let (last_global, last_rl) = {
             let st = shared.state.lock().unwrap_or_else(|e| e.into_inner());
             (st.last_comment_ts, st.last_rate_limit_ts)
         };
-        if (now - last_global) < COOLDOWN_S { continue; }
+        if (now - last_global) < effective_cooldown { continue; }
         // Back off commentary when user is rate-limited — don't compete for API budget
         if (now - last_rl) < RATE_LIMIT_BACKOFF_S { continue; }
 

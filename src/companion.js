@@ -129,8 +129,10 @@ function injectCompanionPanel() {
 
 let _asciiAnimTimer   = null;  // idle→fidget cycle timer
 let _asciiActionTimer = null;  // action frame auto-return timer
+let _asciiBlinkTimer  = null;  // eye blink cycle timer
 let _asciiPre         = null;  // the live <pre> element
 let _asciiState       = 'idle'; // 'idle' | 'fidget' | 'action'
+let _asciiBlinking    = false; // true during blink (eyes closed)
 let _asciiSpecies     = 'duck';
 let _asciiEye         = DEFAULT_EYE;
 let _asciiHat         = 'none';
@@ -144,7 +146,9 @@ function getEyeChar(buddy) {
 
 function updateAsciiFrame(frameIdx) {
   if (!_asciiPre) return;
-  const lines = renderFrame(_asciiSpecies, frameIdx, _asciiEye, _asciiHat);
+  // During blink, swap eye char to '-' (closed eyes)
+  const eye = _asciiBlinking ? '-' : _asciiEye;
+  const lines = renderFrame(_asciiSpecies, frameIdx, eye, _asciiHat);
   _asciiPre.textContent = lines.join('\n');
 }
 
@@ -164,6 +168,28 @@ function scheduleNextFidget() {
       updateAsciiFrame(0);
       scheduleNextFidget();
     }, 350);
+  }, delay);
+}
+
+/** Independent eye blink cycle — fires every 3–6s, 150ms blink duration */
+function scheduleNextBlink() {
+  clearTimeout(_asciiBlinkTimer);
+  if (!_asciiPre) return;
+  const delay = 3000 + Math.random() * 3000;
+  _asciiBlinkTimer = setTimeout(() => {
+    if (!_asciiPre) return;
+    // Don't blink during action frames — looks odd mid-action
+    if (_asciiState === 'action') { scheduleNextBlink(); return; }
+    _asciiBlinking = true;
+    // Re-render current frame with closed eyes
+    const frameIdx = _asciiState === 'fidget' ? 1 : 0;
+    updateAsciiFrame(frameIdx);
+    // Open eyes after 150ms
+    setTimeout(() => {
+      _asciiBlinking = false;
+      if (_asciiPre) updateAsciiFrame(_asciiState === 'fidget' ? 1 : 0);
+      scheduleNextBlink();
+    }, 150);
   }, delay);
 }
 
@@ -217,7 +243,9 @@ function renderCompanionSprite() {
   // Clear previous animation
   clearTimeout(_asciiAnimTimer);
   clearTimeout(_asciiActionTimer);
+  clearTimeout(_asciiBlinkTimer);
   _asciiState = 'idle';
+  _asciiBlinking = false;
 
   // Build <pre>
   panel.innerHTML = '';
@@ -239,6 +267,7 @@ function renderCompanionSprite() {
   // Render initial idle frame and start animation
   updateAsciiFrame(0);
   scheduleNextFidget();
+  scheduleNextBlink();
 }
 
 // ── Bubble display ────────────────────────────────────────────────────────────
@@ -600,6 +629,20 @@ export async function initCompanion() {
 // Returns the lowercase trigger prefix for addressing the companion (e.g. "vexil ")
 export function getBuddyTrigger() {
   return ((buddy?.name ?? 'vexil').toLowerCase()) + ' ';
+}
+
+export async function saveCommentaryFrequency(level) {
+  try {
+    buddy.commentaryFrequency = level;
+    const home = await getHomeDir();
+    const path = `${home}/.config/pixel-terminal/buddy.json`;
+    const raw = await invoke('read_file_as_text', { path });
+    const data = JSON.parse(raw);
+    data.commentaryFrequency = level;
+    await invoke('write_file_as_text', { path, content: JSON.stringify(data, null, 2) });
+  } catch (e) {
+    console.warn('[companion] failed to save commentary frequency:', e?.message ?? e);
+  }
 }
 
 export { LINT_LOG, buddy as companionBuddy };

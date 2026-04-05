@@ -29,7 +29,7 @@ export function scheduleScroll(force = false) {
   _scrollPending = true;
   requestAnimationFrame(() => {
     _scrollPending = false;
-    if ($.messageLog) $.messageLog.lastElementChild?.scrollIntoView({ block: 'end' });
+    if ($.messageLog) $.messageLog.scrollTop = $.messageLog.scrollHeight;
   });
 }
 

@@ -351,6 +351,44 @@ canvas.sprite-canvas {
   text-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
 }
 
+/* Commentary frequency control */
+.fc-freq-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.fc-freq-label {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  margin-right: auto;
+}
+
+.fc-freq-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-mute);
+  font-family: var(--font);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.fc-freq-btn:hover {
+  border-color: var(--border-hi);
+  color: var(--text-mid);
+}
+
+.fc-freq-btn--active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* Re-roll slot + button */
 .fc-reroll-slot {
   display: flex;

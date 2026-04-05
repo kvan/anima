@@ -227,7 +227,7 @@ body {
 #message-log {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-3) var(--sp-3) 24px;
+  padding: var(--sp-3) var(--sp-3) 60px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -252,7 +252,7 @@ body {
   user-select: none;
 }
 body.no-session-active #app-title-pre { opacity: 0.7; }
-body:not(.no-session-active) #app-title-pre { color: var(--text-mid); }
+body:not(.no-session-active) #app-title-pre { color: var(--text-mid); opacity: 0.07; }
 
 /* Empty state text — sits below the logo */
 #empty-state {

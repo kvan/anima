@@ -109,7 +109,7 @@
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: var(--lh-base);
-  max-height: 40%;
+  max-height: 50%;
   flex-shrink: 0;
 }
 #vexil-log {
