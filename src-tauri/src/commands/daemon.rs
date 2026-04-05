@@ -278,11 +278,6 @@ pub async fn daemon_loop(shared: Arc<DaemonShared>) {
     if claude_ok {
         shared.oracle.spawn().await;
         shared.commentary.spawn().await;
-        // Prime both subprocesses so first real query is fast
-        let o = shared.oracle.clone();
-        let c = shared.commentary.clone();
-        tokio::spawn(async move { o.prime().await; });
-        tokio::spawn(async move { c.prime().await; });
     }
 
     loop {
