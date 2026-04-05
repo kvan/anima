@@ -3,3 +3,5 @@ pub mod daemon;
 pub mod file_io;
 pub mod history;
 pub mod misc;
+pub mod oracle;
+pub mod patterns;
