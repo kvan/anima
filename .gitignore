@@ -25,3 +25,18 @@ src-tauri/target/
 *.njsproj
 *.sln
 *.sw?
+
+# Private development state — never commit to public repo
+.chroma/
+.claude/
+backups/
+STATE.md
+CLAUDE.md
+launch.command
+test_auto.cjs
+claudedocs/
+docs/preaudit/
+docs/transcripts/
+scripts/INSTALL-PLAN.md
+scripts/__pycache__/
+*.pyc

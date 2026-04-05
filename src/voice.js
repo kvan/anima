@@ -319,7 +319,8 @@ export function initVoice() {
     } else {
       _showDotStatus('Starting mic…');
       const home = await window.__TAURI__.path.homeDir();
-      const bridgeCmd = `cd ${home}Projects/OmiWebhook && source venv/bin/activate && python3 pixel_voice_bridge.py`;
+      const bridgePath = localStorage.getItem('voiceBridgePath') || `${home}Projects/OmiWebhook`;
+      const bridgeCmd = `cd ${bridgePath} && source venv/bin/activate && python3 pixel_voice_bridge.py`;
       Command.create('sh', ['-c', bridgeCmd]).execute().catch(() => {
         _showDotStatus('Could not start voice bridge');
       });
