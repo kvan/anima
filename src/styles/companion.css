@@ -49,7 +49,8 @@
   color: var(--companion-hue, #d87756);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  text-align: right;
+  text-align: center;
+  flex: 1;
 }
 .vexil-bio-personality { display: none; }
 
