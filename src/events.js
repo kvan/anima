@@ -209,11 +209,13 @@ export function handleEvent(id, event) {
             const stepLabel = s._seqThinkCount === 1
               ? '⟳ reasoning…'
               : `⟳ reasoning · step ${s._seqThinkCount}`;
+            pxLog('SEQ-THINK', `id:${id.slice(0,8)} step:${s._seqThinkCount} active:${getActiveSessionId() === id} hasEl:${!!s._seqThinkEl}`);
             if (s._seqThinkEl && getActiveSessionId() === id) {
               const label = s._seqThinkEl.querySelector('.system-label');
               if (label) label.textContent = stepLabel;
             } else {
               s._seqThinkEl = pushMessage(id, { type: 'system-msg', text: stepLabel });
+              pxLog('SEQ-THINK', `pushMessage returned: ${s._seqThinkEl ? 'element' : 'null'}`);
             }
           }
           // UI display: hide MCP + internal tools from message log

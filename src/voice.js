@@ -287,7 +287,7 @@ function initOraclePreChat() {
   function _maybePostIntro() {
     if (_introPosted || !_companionName) return;
     _introPosted = true;
-    appendEntry(`address me as "${_companionName}" if you want my opinion.`, 'vexil-entry vexil-entry--buddy oracle-intro');
+    appendEntry(`Address me as "${_companionName}" if you want to talk.`, 'vexil-entry vexil-entry--buddy oracle-intro');
   }
 
   document.addEventListener('pixel:companion-ready', (e) => {
