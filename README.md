@@ -1,85 +1,69 @@
-<div align="center">
+<h1 align="center">
+    <img src="graphics/00_logo/anima_wordmark_ascii.png" alt="Anima" width="400">
+</h1>
 
-<img src="src-tauri/icons/icon_master_1024_rounded.png" width="120" alt="Anima" />
+<h2 align="center" style="padding-bottom: 20px;">
+  Your Claude Code environment, inhabited.
+</h2>
 
-# Anima
+<div align="center" style="margin-top: 25px;">
 
-[![Tauri v2](https://img.shields.io/badge/Tauri-v2-FFC131?logo=tauri)](https://tauri.app)
-[![macOS](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple)](https://www.apple.com/macos/)
-[![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha-orange)](https://github.com/btangonan/pixel-terminal/releases)
-
-**Your Claude Code environment, inhabited.**
-A native macOS frontend for Claude Code — with a gamified companion, token economy, and cross-session watcher.
+[![Tauri v2](https://img.shields.io/badge/Tauri-v2-FFC131?logo=tauri&style=flat)](https://tauri.app)
+[![macOS](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&style=flat)](https://www.apple.com/macos/)
+[![license](https://img.shields.io/github/license/btangonan/pixel-terminal?color=0183ff&style=flat)](LICENSE)
+[![version](https://img.shields.io/badge/version-0.1.0--alpha-orange?style=flat)](https://github.com/btangonan/pixel-terminal/releases)
 
 </div>
 
----
+<div align="center">
+<a href="https://github.com/btangonan/pixel-terminal/releases">📦 Releases</a> • <a href="https://github.com/btangonan/pixel-terminal/discussions">💬 Discussions</a> • <a href="https://github.com/btangonan/pixel-terminal/issues">🐛 Issues</a> • <a href="CONTRIBUTING.md">🤝 Contributing</a>
+</div>
 
-Twelve terminal windows. All anonymous. Each one running a different Claude session: refactoring auth, writing tests, debugging a build. Nothing to tell them apart but a number in the title bar.
+<br/>
 
-Anima fixes that. It's a native macOS app that wraps the Claude Code CLI and gives every session a companion — a generated pixel creature with its own name, species, and personality. They watch your work, fire commentary when something's off, and persist across sessions so your projects feel less like ephemeral processes and more like a place where things live.
+Anima is a native macOS app that wraps the Claude Code CLI and gives every session a companion — a generated pixel creature with its own name, species, and personality. They watch your work, fire commentary when something's off, and persist across sessions so your projects feel less like ephemeral processes and more like a place where things live.
 
 The name comes from animism. Inhabited spaces teem with activity. Not sacred. Just alive.
 
 ![Anima demo](graphics/02_gifs/00_git-ready/anima-demo.gif)
 
----
+## Features
 
-## What's in here
+- **One project, one companion** — every project gets a unique familiar generated from a weighted rarity pool. Two developers on the same codebase won't get the same creature.
+- **Nim token economy** — 1 nim per 1000 tokens spent. Spend on re-rolls and new characters. Progress, not anxiety.
+- **Collectible familiar cards** — each project gets a stat card: species, rarity, power ratings, session history. Like a Pokémon card for your codebase.
+- **Cross-session watcher** — Rust daemon monitors all active Claude sessions simultaneously. Catches retry loops and read-heavy spirals in real time.
+- **Oracle commentary** — companion fires contextual observations in a speech bubble. Selectable text — copy and paste into the session.
+- **Voice input** — Bluetooth mic + push-to-talk. Hands-free Claude via WebSocket bridge.
+- **Session history** — full session browser. Replay any past conversation. JSONL-backed.
+- **Native performance** — Tauri v2 + Rust backend. Not Electron. Actual macOS app.
 
-**Sessions have faces.**
-Open a project and a companion appears — species drawn from a weighted rarity pool, personality seeded from the project path. Rare pulls happen. Two developers on the same codebase won't get the same creature. Each familiar card logs your project's stats: tokens spent, tools used, sessions run.
+<p align="center">
+  <img src="graphics/01_ui/anima_session-cards.png" alt="Session list with pixel companions" width="280">
+</p>
 
-**Token spend means something.**
-The Claude Code weekly limit is easy to treat as a ceiling to avoid. Anima reframes it. Every 1000 tokens earns 1 nim — the in-app currency. Nim funds re-rolls, new companions, cosmetics. Not a limit to dread. A counter to fill — on tokens you'd spend anyway.
+## How it looks
 
-**You're not working alone.**
-Vexil is the cross-session watcher daemon running in the Rust backend while Claude works. It tracks tool patterns across all active sessions: reads when you're reading too much, spots retry loops before you've noticed them. When it catches you going in circles, something shifts. It's not *I'm stuck*. It's *we're stuck*. That's enough.
+![Sessions and companions](graphics/02_gifs/00_git-ready/anima_a.gif)
+
+**Sessions have faces.** Open a project and a companion appears — species drawn from a weighted rarity pool, personality seeded from the project path. Rare pulls happen.
+
+![Familiar cards and economy](graphics/02_gifs/00_git-ready/anima_b.gif)
+
+**Token spend means something.** Every 1000 tokens earns 1 nim. Nim funds re-rolls, new companions, cosmetics. Not a limit to dread. A counter to fill.
+
+![Watcher commentary](graphics/02_gifs/00_git-ready/anima_c-1.gif)
+
+**You're not working alone.** The watcher daemon tracks tool patterns across all active sessions. When it catches you going in circles, the companion says something. It's not *I'm stuck*. It's *we're stuck*.
+
+![Multi-session workflow](graphics/02_gifs/00_git-ready/anima_d.gif)
 
 *Commentary runs as short background prompts via the Claude CLI — capped at 2 concurrent calls. All processing is local; nothing leaves your machine except the API calls you'd make anyway.*
 
----
-
-## Why Anima?
-
-**The companion noticed something. Act on it.**
-Claude Code's built-in companion shows advice in a bubble you can't touch — screenshot it or retype it by hand. In Anima, companion comments are selectable text. Copy, paste into the session, send. Done.
-
-**Twelve windows. All running. None of them telling you anything.**
-Anima's session manager gives each one a face: a sprite that animates when work is happening, a live token counter, a notification when Claude finishes and is waiting on you. You stop babysitting tabs. You start actually knowing what's going on — and so does your companion.
-
-**You attached that file three messages ago. Now you need it again.**
-In a terminal, that means finding it, dragging it back, re-attaching. Anima tracks every file you've sent in a session and surfaces it for re-use. Your companion remembers what you handed Claude, even when you've moved on.
-
-**Every session has a story. Anima keeps them all.**
-Full chat history for every project, every session — browsable without leaving the app. Good for context. Better when your companion has been watching the whole run and can tell you what you missed.
-
----
-
-## Features
-
-| | |
-|---|---|
-| 🐉 **Companion** | Species + personality generated per project. Weighted rarity pool — common to legendary. Persistent across sessions. |
-| 🎮 **Nim economy** | 1 nim per 1000 tokens spent. Spend on re-rolls and new characters. Progress, not anxiety. |
-| 📋 **Familiar cards** | Each project gets a collectible card: species, rarity, stats, session history. Like a Pokémon card for your codebase. |
-| 👁️ **Cross-session watcher** | Rust daemon monitors all active Claude sessions simultaneously. Catches retry loops and read-heavy spirals in real time. |
-| 🎙️ **Voice** | Bluetooth mic + push-to-talk. Hands-free Claude. WebSocket bridge, no intermediary. |
-| 📜 **Session history** | Full session browser. Replay any past conversation. JSONL-backed, O(1) scan per file. |
-| ⚡ **Native** | Tauri v2 + Rust backend. Not Electron. Actual macOS app. |
-
----
-
-## Screenshots
-
 <div align="center">
-<img src="graphics/01_ui/anima_session-cards.png" width="220" alt="Session list with pixel companions" />
-<img src="graphics/01_ui/anima_stat-card.png" width="340" alt="Familiar stat card" />
-<img src="graphics/01_ui/anima_oracle-chat.png" width="220" alt="Oracle commentary" />
+<img src="graphics/01_ui/anima_stat-card.png" alt="Familiar stat card" width="420">
+<img src="graphics/01_ui/anima_oracle-chat.png" alt="Oracle commentary" width="280">
 </div>
-
----
 
 ## Requirements
 
@@ -87,9 +71,7 @@ Full chat history for every project, every session — browsable without leaving
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
 - Node.js 18+
 
----
-
-## Quick start
+## Getting Started
 
 1. Download `Anima.dmg` from [Releases](https://github.com/btangonan/pixel-terminal/releases)
 2. Open the app
@@ -97,14 +79,7 @@ Full chat history for every project, every session — browsable without leaving
 
 The companion generates on first session. Nim accrues automatically.
 
----
-
-## Build from source
-
-<details>
-<summary>Expand</summary>
-
-**Prerequisites:** Rust toolchain, Node.js 18+
+### Build from source
 
 ```bash
 git clone https://github.com/btangonan/pixel-terminal
@@ -126,11 +101,7 @@ Rust tests:
 cd src-tauri && cargo test
 ```
 
-</details>
-
----
-
-## How it works
+## How It Works
 
 Anima is a Tauri v2 desktop app. The frontend is vanilla JS — no framework, no bundler. The Rust backend handles file I/O, path security, companion sync, and the cross-session watcher. A WebSocket bridge handles voice input.
 
@@ -138,15 +109,11 @@ The watcher (`daemon.rs`) is a Tokio async loop that polls Claude Code's session
 
 Full architecture notes: [`docs/architecture.md`](docs/architecture.md)
 
----
-
 ## Contributing
 
 Issues and PRs welcome. See [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE) for bug report and feature request templates.
 
 Alpha software. Solo project. Breaking changes happen.
-
----
 
 ## License
 
