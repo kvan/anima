@@ -15,7 +15,7 @@
   cursor: pointer;
 }
 #omi-indicator.connected {
-  background: #4fa3ff;              /* blue = mic/ble connected */
+  background: #d87756;              /* orange = mic/ble connected */
 }
 
 /* ── Always-on mic toggle ─── */

@@ -391,7 +391,7 @@ body.no-session-active #empty-state { display: block; }
   padding: 0;
   white-space: pre;
   user-select: none;
-  text-shadow: 0 0 6px color-mix(in srgb, var(--companion-hue, #CC7D5E) 50%, transparent);
+  text-shadow: none;
   opacity: 0.92;
   transition: opacity 0.1s;
 }
@@ -867,7 +867,7 @@ canvas.sprite-canvas {
   cursor: pointer;
 }
 #omi-indicator.connected {
-  background: #4fa3ff;              /* blue = mic/ble connected */
+  background: #d87756;              /* orange = mic/ble connected */
 }
 
 /* ── Always-on mic toggle ─── */
@@ -1864,7 +1864,7 @@ body.no-session-active #btn-new-session.plus-inverted {
 
 .fc-shiny--active {
   color: #ffd700;
-  text-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
+  text-shadow: none;
 }
 
 /* Re-roll slot + button */
@@ -1872,6 +1872,7 @@ body.no-session-active #btn-new-session.plus-inverted {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-left: auto;
 }
 
 .fc-reroll-btn {

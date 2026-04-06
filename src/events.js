@@ -203,20 +203,16 @@ export function handleEvent(id, event) {
             }
             appendVexilFeed({ type: 'tool_use', session_id: id.slice(0, 8), tool: b.name, hint: (hint || '').slice(0, 120), file: filePath, cwd: s.cwd });
           }
-          // Sequential thinking: surface progress in session log
+          // Sequential thinking: surface reasoning steps in session log
           if (b.name === 'mcp__sequential-thinking__sequentialthinking') {
             s._seqThinkCount = (s._seqThinkCount || 0) + 1;
-            const stepLabel = s._seqThinkCount === 1
-              ? 'reasoning…'
-              : `reasoning · step ${s._seqThinkCount}`;
-            pxLog('SEQ-THINK', `id:${id.slice(0,8)} step:${s._seqThinkCount} active:${getActiveSessionId() === id} hasEl:${!!s._seqThinkEl}`);
-            if (s._seqThinkEl && getActiveSessionId() === id) {
-              const label = s._seqThinkEl.querySelector('.seq-think-label');
-              if (label) label.innerHTML = `<span class="seq-think-spinner">⟳</span> ${stepLabel}`;
-            } else {
-              s._seqThinkEl = pushMessage(id, { type: 'seq-think', text: stepLabel });
-              pxLog('SEQ-THINK', `pushMessage returned: ${s._seqThinkEl ? 'element' : 'null'}`);
-            }
+            const inp = typeof b.input === 'object' ? b.input : {};
+            const thought = inp.thought || inp.title || `step ${s._seqThinkCount}`;
+            const stepLabel = `reasoning · ${thought}`;
+            pxLog('SEQ-THINK', `id:${id.slice(0,8)} step:${s._seqThinkCount} thought:${thought.slice(0,60)}`);
+            // Each step gets its own message line
+            const el = pushMessage(id, { type: 'seq-think', text: stepLabel });
+            if (!s._seqThinkEl) s._seqThinkEl = el;  // track first for completion marker
           }
           // UI display: hide MCP + internal tools from message log
           if (!isInternalTool(b.name)) {

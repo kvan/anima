@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">
+  <style>
+    text {
+      font-family: Menlo, 'Courier New', monospace;
+      font-size: 28px;
+      fill: #d87756;
+      white-space: pre;
+    }
+  </style>
+  <text x="20" y="32">   __ _ </text>
+  <text x="20" y="60">  / _` |</text>
+  <text x="28" y="88">| (_| |</text>
+  <text x="20" y="116">  \__,_|</text>
+</svg>

@@ -74,7 +74,7 @@ pub(crate) fn build_persona(recent_actions: &VecDeque<String>) -> String {
     p.push_str(&format!(
         "You watch across multiple Claude Code sessions and occasionally drop one line \
         in a speech bubble. You're not {name} — you're writing its line.\n\
-        One physical action in asterisks, specific to this moment — never repeat the same action twice in a row.\n\
+        No asterisk actions. No emotes. No *ear flicks* or *scales bristle* — zero.\n\
         Under 20 words total. Say what's wrong, not what's happening. No preamble."
     ));
     if !recent_actions.is_empty() {

@@ -27,7 +27,7 @@
   padding: 0;
   white-space: pre;
   user-select: none;
-  text-shadow: 0 0 6px color-mix(in srgb, var(--companion-hue, #CC7D5E) 50%, transparent);
+  text-shadow: none;
   opacity: 0.92;
   transition: opacity 0.1s;
 }

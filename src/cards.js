@@ -58,7 +58,11 @@ function _buildCardContent(opts, onDismiss) {
   nameEl.textContent = (opts.name ?? opts.species).toUpperCase();
   const rarityEl = document.createElement('div');
   rarityEl.className = 'fc-rarity';
-  rarityEl.textContent = `${stars} ${rarity.toUpperCase()}`;
+  const starSpan = document.createElement('span');
+  starSpan.className = 'fc-rarity-star';
+  starSpan.textContent = stars;
+  rarityEl.appendChild(starSpan);
+  rarityEl.appendChild(document.createTextNode(` ${rarity.toUpperCase()}`));
   const typeEl = document.createElement('div');
   typeEl.className = 'fc-type';
   typeEl.textContent = `TYPE: ${opts.species.toUpperCase()}`;
@@ -130,7 +134,7 @@ function _buildCardContent(opts, onDismiss) {
   card.append(header, body, footer);
   overlay.appendChild(card);
 
-  const onKey = e => { if (e.key === 'Escape') onDismiss(); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); onDismiss(); } };
 
   return { overlay, card, spritePre, footer, onKey };
 }
@@ -153,14 +157,10 @@ export function showFamiliarCard(sessionId) {
   // Re-roll button (familiar-only)
   const rerollSlot = document.createElement('div');
   rerollSlot.className = 'fc-reroll-slot';
-  const canAfford = REROLL_NIM_COST === 0 || getNimBalance() >= REROLL_NIM_COST;
   const rerollBtn = document.createElement('button');
-  rerollBtn.className = 'fc-reroll-btn' + (canAfford ? '' : ' fc-reroll-btn--locked');
-  rerollBtn.disabled = !canAfford;
-  rerollBtn.textContent = REROLL_NIM_COST > 0 ? `RE-ROLL · ${REROLL_NIM_COST} @NIM@` : 'RE-ROLL';
-  if (!canAfford) rerollBtn.title = `Need ${REROLL_NIM_COST} @NIM@ — you have ${getNimBalance()}`;
+  rerollBtn.className = 'fc-reroll-btn';
+  rerollBtn.textContent = 'RE-ROLL';
   rerollBtn.addEventListener('click', () => {
-    if (!canAfford) return;
     hideFamiliarCard();
     showRerollConfirm(sessionId);
   });

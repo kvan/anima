@@ -7,8 +7,8 @@ When Claude needs permission, this server writes a gate request file
 and polls for the user's response from the companion UI.
 
 IPC files are session-scoped via ANIMA_SESSION env var:
-  /tmp/anima_gate_{session_id}.json         — gate request
-  /tmp/anima_gate_{session_id}_response.json — user response
+  ~/.local/share/pixel-terminal/anima_gate_{session_id}.json         — gate request
+  ~/.local/share/pixel-terminal/anima_gate_{session_id}_response.json — user response
 """
 
 import json
@@ -17,9 +17,11 @@ import sys
 import time
 
 SESSION_ID = os.environ.get('ANIMA_SESSION', 'default')
-GATE_REQUEST  = f'/tmp/anima_gate_{SESSION_ID}.json'
-GATE_RESPONSE = f'/tmp/anima_gate_{SESSION_ID}_response.json'
-ALIVE_FILE    = '/tmp/pixel_terminal_alive'
+IPC_DIR = os.path.join(os.path.expanduser('~'), '.local', 'share', 'pixel-terminal')
+os.makedirs(IPC_DIR, exist_ok=True)
+GATE_REQUEST  = os.path.join(IPC_DIR, f'anima_gate_{SESSION_ID}.json')
+GATE_RESPONSE = os.path.join(IPC_DIR, f'anima_gate_{SESSION_ID}_response.json')
+ALIVE_FILE    = os.path.join(IPC_DIR, 'pixel_terminal_alive')
 
 TIMEOUT_S = 60
 POLL_S    = 0.3

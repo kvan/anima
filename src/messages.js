@@ -162,7 +162,7 @@ export function createMsgEl(msg) {
     el.innerHTML = `<div class="system-label">${esc(msg.text)}</div>`;
 
   } else if (msg.type === 'seq-think') {
-    el.innerHTML = `<div class="seq-think-label"><span class="seq-think-spinner">⟳</span> ${esc(msg.text)}</div>`;
+    el.innerHTML = `<div class="seq-think-label">${esc(msg.text)}</div>`;
 
   } else if (msg.type === 'error') {
     el.innerHTML = `<div class="error-msg">${esc(msg.text)}</div>`;

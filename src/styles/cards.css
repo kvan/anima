@@ -221,9 +221,18 @@ canvas.sprite-canvas {
 }
 
 .fc-rarity {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: var(--fs-xs);
   color: var(--fc-rarity-color, #555);
   letter-spacing: 0.5px;
+}
+.fc-rarity-star {
+  font-size: 10px;
+  line-height: 1;
+  position: relative;
+  top: -1px;
 }
 
 .fc-type {
@@ -336,6 +345,7 @@ canvas.sprite-canvas {
 /* Footer */
 .fc-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   padding: 5px 10px;
@@ -345,13 +355,15 @@ canvas.sprite-canvas {
   font-size: var(--fs-xs);
   color: #ffd700;
   letter-spacing: 0.5px;
-  text-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
+  text-shadow: none;
 }
 
 /* Commentary frequency buttons */
 .fc-freq-row {
   display: flex;
   align-items: center;
+  width: 100%;
+  margin-top: 6px;
   gap: 6px;
 }
 
@@ -362,6 +374,7 @@ canvas.sprite-canvas {
 }
 
 .fc-freq-btn {
+  flex: 1;
   background: none;
   border: 1px solid var(--border);
   color: var(--text-mute);
@@ -378,9 +391,10 @@ canvas.sprite-canvas {
   color: var(--text-mid);
 }
 
-.fc-freq-btn--active {
-  border-color: var(--accent);
-  color: var(--accent);
+.fc-freq-btn--active,
+.fc-freq-btn--active:hover {
+  border-color: #fff;
+  color: #fff;
 }
 
 /* Re-roll slot + button */
@@ -388,6 +402,7 @@ canvas.sprite-canvas {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-left: auto;
 }
 
 .fc-reroll-btn {

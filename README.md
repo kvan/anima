@@ -22,8 +22,7 @@ Anima fixes that. It's a native macOS app that wraps the Claude Code CLI and giv
 
 The name comes from animism. Inhabited spaces teem with activity. Not sacred. Just alive.
 
-<!-- REPLACE: record a 30-45s screen capture showing session start → companion → Vexil bubble → nim tick -->
-![Anima demo](docs/assets/demo.gif)
+![Anima demo](graphics/02_gifs/00_git-ready/anima-demo.gif)
 
 ---
 
@@ -74,12 +73,10 @@ Full chat history for every project, every session — browsable without leaving
 
 ## Screenshots
 
-<!-- REPLACE: take these three screenshots from the running app -->
-
 <div align="center">
-<img src="docs/screenshots/session-card.png" width="280" alt="Session with familiar card" />
-<img src="docs/screenshots/familiar-card.png" width="280" alt="Familiar card close-up" />
-<img src="docs/screenshots/vexil-bubble.png" width="280" alt="Vexil commentary in action" />
+<img src="graphics/01_ui/anima_session-cards.png" width="220" alt="Session list with pixel companions" />
+<img src="graphics/01_ui/anima_stat-card.png" width="340" alt="Familiar stat card" />
+<img src="graphics/01_ui/anima_oracle-chat.png" width="220" alt="Oracle commentary" />
 </div>
 
 ---

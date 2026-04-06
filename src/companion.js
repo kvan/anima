@@ -1,9 +1,9 @@
 /**
  * companion.js — Vexil Memory Linter companion
  *
- * Polls /tmp/vexil_lint.json every 3s. Surfaces violations via a speech bubble
- * anchored to the bottom-right corner of the app. For ASK-tier violations,
- * shows interactive approve/deny buttons and writes /tmp/vexil_approval.json.
+ * Polls ~/.local/share/pixel-terminal/vexil_lint.json every 3s. Surfaces violations
+ * via a speech bubble anchored to the bottom-right corner of the app. For ASK-tier
+ * violations, shows interactive approve/deny buttons and writes vexil_approval.json.
  *
  * Character voice is driven by buddy.json:
  *   ~/.config/pixel-terminal/buddy.json → { species, name, voice, stats, hue }
@@ -18,13 +18,26 @@ import { showOracleCard } from './cards.js';
 
 const { invoke } = window.__TAURI__.core;
 
-// ── Paths ─────────────────────────────────────────────────────────────────────
+// ── IPC directory ─────────────────────────────────────────────────────────────
+// Use ~/.local/share/pixel-terminal/ instead of /tmp/ to avoid world-writable
+// symlink attacks and multi-user collisions (see PRE_AUDIT_SUMMARY_v2.md #2).
 
-const LINT_PATH    = '/tmp/vexil_lint.json';
-const APPROVAL_PATH = '/tmp/vexil_approval.json';
-// Hook gate paths (pixel_gate.py — power-user hooks)
-const HOOK_GATE_PATH      = '/tmp/pixel_hook_gate.json';
-const HOOK_GATE_RESP_PATH = '/tmp/pixel_hook_gate_response.json';
+let _ipcDir = null;
+async function getIpcDir() {
+  if (_ipcDir) return _ipcDir;
+  const home = await window.__TAURI__.path.homeDir();
+  _ipcDir = `${home}.local/share/pixel-terminal/`;
+  return _ipcDir;
+}
+
+// Lazy path getters (awaitable)
+const ipcPath = async (name) => (await getIpcDir()) + name;
+
+// Legacy constants replaced by ipcPath():
+//   LINT_PATH    → ipcPath('vexil_lint.json')
+//   APPROVAL_PATH → ipcPath('vexil_approval.json')
+//   HOOK_GATE_PATH      → ipcPath('pixel_hook_gate.json')
+//   HOOK_GATE_RESP_PATH → ipcPath('pixel_hook_gate_response.json')
 
 const POLL_INTERVAL = 3000;   // ms
 
@@ -290,14 +303,14 @@ async function writeApproval(approved) {
     if (_hookGatePending) {
       // Hook gate response (pixel_gate.py is polling this)
       const payload = JSON.stringify({ id: _hookGateReqId, approved });
-      await invoke('write_file_as_text', { path: HOOK_GATE_RESP_PATH, content: payload });
-      await invoke('write_file_as_text', { path: HOOK_GATE_PATH, content: '{}' }).catch(() => {});
+      await invoke('write_file_as_text', { path: await ipcPath('pixel_hook_gate_response.json'), content: payload });
+      await invoke('write_file_as_text', { path: await ipcPath('pixel_hook_gate.json'), content: '{}' }).catch(() => {});
       _hookGatePending = false;
       _hookGateReqId   = null;
     } else {
       // Route to Vexil approval file (memory_lint.py is polling this)
       const payload = JSON.stringify({ approved });
-      await invoke('write_file_as_text', { path: APPROVAL_PATH, content: payload });
+      await invoke('write_file_as_text', { path: await ipcPath('vexil_approval.json'), content: payload });
       _approvalPending = false;
       _lastLintSeen = '';  // reset so pollLintFile re-reads fresh state from memory_lint.py
     }
@@ -310,14 +323,14 @@ async function writeApproval(approved) {
 }
 
 // ── Hook gate poller ──────────────────────────────────────────────────────────
-// Polls /tmp/pixel_hook_gate.json for permission gate requests (pixel_gate.py hooks)
+// Polls pixel_hook_gate.json for permission gate requests (pixel_gate.py hooks)
 
 async function pollHookGate() {
   if (_hookGatePending) return;
 
   let raw;
   try {
-    raw = await invoke('read_file_as_text', { path: HOOK_GATE_PATH });
+    raw = await invoke('read_file_as_text', { path: await ipcPath('pixel_hook_gate.json') });
   } catch {
     return;
   }
@@ -343,7 +356,7 @@ async function pollLintFile() {
 
   let raw;
   try {
-    raw = await invoke('read_file_as_text', { path: LINT_PATH });
+    raw = await invoke('read_file_as_text', { path: await ipcPath('vexil_lint.json') });
   } catch {
     return;  // file missing = no lint state
   }
@@ -387,7 +400,7 @@ async function pollLintFile() {
 
 async function pollOpsReport() {
   try {
-    const raw = await invoke('read_file_as_text', { path: '/tmp/vexil_ops_report.json' });
+    const raw = await invoke('read_file_as_text', { path: await ipcPath('vexil_ops_report.json') });
     const report = JSON.parse(raw);
     // Dedup by ops_count + session_start_ts — shows again if new ops were logged
     const key = `${report.session_start_ts}:${report.ops_count}`;
@@ -588,11 +601,11 @@ export async function initCompanion() {
   // Companion hue: always use app accent — species hue is for familiars, not the oracle
   document.documentElement.style.setProperty('--companion-hue', '#d87756');
 
-  // Heartbeat: write /tmp/pixel_terminal_alive every 5s so memory_lint.py
+  // Heartbeat: write alive marker every 5s so memory_lint.py
   // knows the terminal is open and should wait for user approval
   async function writeAlive() {
     try {
-      await invoke('write_file_as_text', { path: '/tmp/pixel_terminal_alive', content: String(Date.now()) });
+      await invoke('write_file_as_text', { path: await ipcPath('pixel_terminal_alive'), content: String(Date.now()) });
     } catch { /* non-fatal */ }
   }
   writeAlive();  // immediate on init
@@ -600,12 +613,12 @@ export async function initCompanion() {
 
   // Seed dedup keys from existing files — prevents stale data from re-displaying on every launch
   try {
-    const raw = await invoke('read_file_as_text', { path: '/tmp/vexil_ops_report.json' });
+    const raw = await invoke('read_file_as_text', { path: await ipcPath('vexil_ops_report.json') });
     const report = JSON.parse(raw);
     _lastOpsKey = `${report.session_start_ts}:${report.ops_count}`;
   } catch { /* file doesn't exist yet — fine */ }
   try {
-    const raw = await invoke('read_file_as_text', { path: LINT_PATH });
+    const raw = await invoke('read_file_as_text', { path: await ipcPath('vexil_lint.json') });
     _lastLintSeen = raw.trim();
   } catch { /* file doesn't exist yet — fine */ }
 

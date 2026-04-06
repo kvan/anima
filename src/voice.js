@@ -281,24 +281,6 @@ function initOraclePreChat() {
   setVisible();
 
   // Post intro once — only after companion is ready AND a session is active
-  let _introPosted = false;
-  let _companionName = null;
-
-  function _maybePostIntro() {
-    if (_introPosted || !_companionName) return;
-    _introPosted = true;
-    appendEntry(`Address me as "${_companionName}" if you want to talk.`, 'vexil-entry vexil-entry--buddy oracle-intro');
-  }
-
-  document.addEventListener('pixel:companion-ready', (e) => {
-    _companionName = e.detail?.name || companionBuddy?.name;
-    // Only post if a session is already active when companion loads
-    if (getActiveSessionId()) _maybePostIntro();
-  }, { once: true });
-
-  document.addEventListener('pixel:session-changed', () => {
-    _maybePostIntro();
-  });
 }
 
 // ── Init (called once from bootstrap) ──────────────────────
@@ -319,7 +301,11 @@ export function initVoice() {
     } else {
       _showDotStatus('Starting mic…');
       const home = await window.__TAURI__.path.homeDir();
-      const bridgePath = localStorage.getItem('voiceBridgePath') || `${home}Projects/OmiWebhook`;
+      const bridgePath = localStorage.getItem('voiceBridgePath');
+      if (!bridgePath) {
+        _showDotStatus('Set voiceBridgePath in Settings');
+        return;
+      }
       const bridgeCmd = `cd ${bridgePath} && source venv/bin/activate && python3 pixel_voice_bridge.py`;
       Command.create('sh', ['-c', bridgeCmd]).execute().catch(() => {
         _showDotStatus('Could not start voice bridge');
