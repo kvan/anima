@@ -21,9 +21,7 @@
 
 <br/>
 
-Anima is a native macOS app that wraps the Claude Code CLI and gives every session a companion — a generated pixel creature with its own name, species, and personality. They watch your work, fire commentary when something's off, and persist across sessions so your projects feel less like ephemeral processes and more like a place where things live.
-
-The name comes from animism. Inhabited spaces teem with activity. Not sacred. Just alive.
+Anima is a native macOS app that wraps the Claude Code CLI and gives every session a set of Claude buddies. They watch your work, fire commentary when something's off, and persist across sessions so your projects feel less like ephemeral processes and more like a place where things live.
 
 ![Anima demo](graphics/02_gifs/00_git-ready/anima-demo.gif)
 
