@@ -33,3 +33,6 @@ objc = "0.2"
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
 
+[lints.clippy]
+unwrap_used = "warn"
+

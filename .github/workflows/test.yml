@@ -8,7 +8,7 @@ on:
 
 jobs:
   test-js:
-    name: JS Tests (Vitest)
+    name: JS Tests (Vitest + Coverage)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,16 +17,28 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npm test
+      - run: npm run test:coverage
+      - name: npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
 
   test-rust:
-    name: Rust Tests (cargo test)
+    name: Rust Tests (cargo test + clippy + audit)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workdir: src-tauri
+      - name: clippy
+        run: cargo clippy -- -W clippy::unwrap_used 2>&1 || true
+        working-directory: src-tauri
       - run: cargo test
         working-directory: src-tauri
+      - name: cargo audit
+        run: cargo install cargo-audit --locked 2>/dev/null || true && cargo audit
+        working-directory: src-tauri
+        continue-on-error: true
