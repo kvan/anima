@@ -183,13 +183,13 @@ export { _settingsUpdate as settingsUpdate };
 function toggleOmiListening() {
   omiListening = !omiListening;
   _omiIndicatorUpdate();
-  try { invoke('set_omi_listening', { enabled: omiListening }); } catch (_) {}
+  invoke('set_omi_listening', { enabled: omiListening }).catch(e => console.warn('[voice] set_omi_listening failed:', e));
 }
 
 function toggleAlwaysOn() {
   alwaysOn = !alwaysOn;
   _alwaysOnUpdate();
-  try { invoke('set_voice_mode', { mode: alwaysOn ? 'always_on' : 'trigger_mode' }); } catch (_) {}
+  invoke('set_voice_mode', { mode: alwaysOn ? 'always_on' : 'trigger_mode' }).catch(e => console.warn('[voice] set_voice_mode failed:', e));
 }
 
 function _isPttKey(e) {
@@ -203,7 +203,7 @@ function _switchVoiceSource(source) {
   _omiIndicatorUpdate();
   const label = source === 'ble' ? 'BLE pendant' : 'Mac mic';
   appendVoiceLog(`Switching to ${label} \u2014 reconnecting...`, new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}), false);
-  try { invoke('switch_voice_source', { source }); } catch (_) {}
+  invoke('switch_voice_source', { source }).catch(e => console.warn('[voice] switch_voice_source failed:', e));
 }
 
 function resolveSession(ref) {
@@ -312,7 +312,7 @@ export function initVoice() {
       omiConnected = true;
       _omiIndicatorUpdate();
     }
-  }).catch(() => {});
+  }).catch(e => console.warn('[voice] get_voice_status failed:', e));
 
   // Omi indicator click — launch voice bridge if not connected
   $.omiIndicator?.addEventListener('click', async (e) => {
@@ -374,8 +374,8 @@ export function initVoice() {
   tauriListen('omi:connected', () => {
     omiConnected = true;
     _omiIndicatorUpdate();
-    try { invoke('set_omi_listening', { enabled: omiListening }); } catch (_) {}
-    try { invoke('set_voice_mode', { mode: alwaysOn ? 'always_on' : 'trigger_mode' }); } catch (_) {}
+    invoke('set_omi_listening', { enabled: omiListening }).catch(e => console.warn('[voice] set_omi_listening failed:', e));
+    invoke('set_voice_mode', { mode: alwaysOn ? 'always_on' : 'trigger_mode' }).catch(e => console.warn('[voice] set_voice_mode failed:', e));
   });
 
   tauriListen('omi:disconnected', () => {
@@ -399,14 +399,14 @@ export function initVoice() {
     if (pttActive) return;
     if (!omiConnected) return;
     pttActive = true;
-    try { invoke('ptt_start'); } catch (_) {}
+    invoke('ptt_start').catch(e => console.warn('[voice] ptt_start failed:', e));
     _pttIndicatorUpdate();
   });
   document.addEventListener('keyup', (e) => {
     if (!_isPttKey(e)) return;
     if (!pttActive) return;
     pttActive = false;
-    try { invoke('ptt_release'); } catch (_) {}
+    invoke('ptt_release').catch(e => console.warn('[voice] ptt_release failed:', e));
     _pttIndicatorUpdate();
   });
 

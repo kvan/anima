@@ -7,6 +7,45 @@ import { updateSessionCard } from './cards.js';
 import { pxLog } from './logger.js';
 import { addToVexilLog, getBuddyTrigger, triggerAsciiAction } from './companion.js';
 import { accrueNimForSession } from './nim.js';
+import { writeTaskLedger } from './session-lifecycle.js';
+
+// ── Model context window sizes (tokens) ───────────────────────────────
+// NOTE: Opus 4.6 and Sonnet 4.6 support 1M tokens at the API level (GA March 2026),
+// but Claude Code currently enforces a 200K effective window. When Claude Code
+// enables 1M, update these values. The baseline capture + compaction detection
+// will self-correct regardless. See: github.com/anthropics/claude-code/issues/24208
+// Live query alternative: GET https://api.anthropic.com/v1/models/{id} → max_input_tokens
+const MODEL_CONTEXT = {
+  'claude-opus-4-6':      200_000,  // API supports 1M — Claude Code caps at 200K
+  'claude-sonnet-4-6':    200_000,  // API supports 1M — Claude Code caps at 200K
+  'claude-haiku-4-5':     200_000,
+  'claude-sonnet-4-5':    200_000,
+  'claude-opus-4-5':      200_000,
+  'claude-3-5-sonnet':    200_000,
+  'claude-3-5-haiku':     200_000,
+  'claude-3-opus':        200_000,
+};
+function getContextWindow(model) {
+  if (!model || model === 'unknown') return 200_000;
+  if (MODEL_CONTEXT[model]) return MODEL_CONTEXT[model];
+  const prefix = Object.keys(MODEL_CONTEXT).find(k => model.startsWith(k));
+  if (prefix) return MODEL_CONTEXT[prefix];
+  pxLog('WARN', `Unknown model "${model}" — defaulting to 200K context window`);
+  return 200_000;
+}
+
+// ── Context sideband reader (authoritative % from JSONL usage data) ──
+// context-sideband.sh hook (PostToolUse) extracts last assistant usage from
+// the JSONL transcript and writes {"pct","window","tokens","ts"} per turn.
+// Works in -p mode (unlike statusline, which is interactive-only).
+async function readContextSideband(sessionId) {
+  try {
+    const path = `~/.local/share/pixel-terminal/sessions/${sessionId}/context_status.json`;
+    const raw = await window.__TAURI__?.core?.invoke('read_file_as_text', { path });
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
 
 // ── Vexil Master feed (proactive cross-session commentary) ──────────────
 const VEXIL_FEED_PATH = '~/.local/share/pixel-terminal/vexil_feed.jsonl';
@@ -170,6 +209,16 @@ export function handleEvent(id, event) {
         // Only count input+output — cache_read recurs every turn (already-counted context),
         // causing exponential inflation. cache_creation has the same problem.
         s._liveTokens = (u.input_tokens || 0) + (u.output_tokens || 0);
+
+    // Context window fill (all three fields are additive)
+    s._contextTokens = (u.input_tokens || 0)
+      + (u.cache_read_input_tokens || 0)
+      + (u.cache_creation_input_tokens || 0);
+
+    // Capture baseline on first turn (system prompt + scaffolding)
+    if (!s._contextBaseline && s._contextTokens > 0) {
+      s._contextBaseline = s._contextTokens;
+    }
       }
       const blocks = event.message?.content || [];
 
@@ -249,8 +298,17 @@ export function handleEvent(id, event) {
           // Count every tool call for activity tick — including MCP/internal.
           // type:'tool_any' is counter-only; daemon doesn't pattern-match on it.
           appendVexilFeed({ type: 'tool_any', session_id: id.slice(0, 8) });
+          // Task ledger: capture tool calls for compaction recovery
+          if (s._taskLedger) {
+            let filePath = null;
+            try { const inp = typeof b.input === 'object' ? b.input : JSON.parse(b.input || '{}'); filePath = inp.file_path || inp.path || inp.command?.slice(0, 80) || ''; } catch (_) {}
+            s._taskLedger.tools.push({ name: b.name, path: filePath || '' });
+            if (s._taskLedger.tools.length > 30) s._taskLedger.tools.shift();
+          }
         }
       }
+      // Flush task ledger to disk after processing all tool calls in this event
+      if (s._taskLedger && s._taskLedger.tools.length > 0) writeTaskLedger(id, s._taskLedger);
       s._streamedToolIds = null;
 
       setStatus(id, 'working'); // no-op if already working — so always refresh card for live tokens
@@ -314,6 +372,25 @@ export function handleEvent(id, event) {
       }
       if (event.subtype === 'rate_limit') s._hitRateLimit = true;
 
+      // Compaction detection: track token changes for 30% drop (recovery trigger).
+      // Warning logic moved to idle timer — uses sideband for authoritative %.
+      if (s._contextTokens && s._contextBaseline) {
+        // Detect compaction: context dropped significantly (resets warning)
+        if (s._prevContextTokens && s._contextTokens < s._prevContextTokens * 0.7) {
+          s._compactionWarned = false;
+          s._contextBaseline = s._contextTokens; // re-baseline after compaction
+          s._compactionDetected = true;  // flag for inline recovery fallback
+          s._authoritativePct = null;    // stale — sideband will refresh
+          appendVexilFeed({
+            type: 'compaction_detected',
+            session_id: id.slice(0, 8),
+            before: s._prevContextTokens,
+            after: s._contextTokens,
+          });
+        }
+        s._prevContextTokens = s._contextTokens;
+      }
+
       s._liveTokens = 0;
       s._lastMsgUsage = null;
       // Debounce: Claude may immediately start another turn after result.
@@ -360,6 +437,40 @@ export function handleEvent(id, event) {
             user_msg:   (s._lastUserMsg || '').trim().replace(/\n/g, ' ').slice(0, 200),
           });
         }
+        // Task ledger: capture last assistant output for compaction recovery
+        if (s._taskLedger && s._turnText) {
+          s._taskLedger.lastText = s._turnText.slice(-800);
+          writeTaskLedger(id, s._taskLedger);
+        }
+        // ── Sideband context calibration (authoritative % from JSONL hook) ──
+        readContextSideband(id).then(sb => {
+          if (!sb || typeof sb.pct !== 'number') {
+            pxLog('CTX', `id:${id.slice(0,8)} sideband:none (file missing or unreadable)`);
+            return;
+          }
+          // Local meter math for comparison logging
+          const localPct = (s._contextTokens && s._contextBaseline)
+            ? Math.min(100, Math.round(
+                Math.max(0, s._contextTokens - s._contextBaseline)
+                / Math.max(1, (s._contextWindow || 200_000) - s._contextBaseline) * 100))
+            : 0;
+          s._authoritativePct = sb.pct;
+          if (sb.window) s._contextWindow = sb.window; // auto-update (future-proof for 1M)
+          pxLog('CTX', `id:${id.slice(0,8)} sideband:${sb.pct}% local:${localPct}% window:${sb.window}`);
+
+          // Compaction warning: use authoritative % (compaction fires at ~95%)
+          if (sb.pct >= 85 && !s._compactionWarned) {
+            appendVexilFeed({
+              type: 'compaction_imminent',
+              session_id: id.slice(0, 8),
+              pct: sb.pct,
+              context_tokens: s._contextTokens,
+              source: 'sideband',
+            });
+            s._compactionWarned = true;
+          }
+          updateSessionCard(id);
+        }).catch(err => pxLog('CTX', `id:${id.slice(0,8)} sideband error: ${err?.message || err}`));
         // Always reset vexil state — must not bleed into next turn
         s._turnText = '';
         s._lastUserMsg = '';
@@ -375,7 +486,27 @@ export function handleEvent(id, event) {
         }
         s._seqThinkCount = 0;
         s._seqThinkEl = null;
-        setStatus(id, 'idle');
+        // ── Inline compaction recovery (fallback when hooks don't fire) ──
+        if (s._compactionDetected && s.child) {
+          s._compactionDetected = false;
+          const ledger = s._taskLedger || {};
+          const parts = ['[Context was compressed. Task recovery (inline fallback):'];
+          if (ledger.userPrompt) parts.push(`Original request: ${ledger.userPrompt}`);
+          if (ledger.tools?.length) {
+            const recent = ledger.tools.slice(-10).map(t => `${t.name}: ${t.path}`).join(', ');
+            parts.push(`Recent tools: ${recent}`);
+          }
+          if (ledger.lastText) parts.push(`Last output: ${ledger.lastText.slice(-400)}`);
+          parts.push('Resume from where you left off. Do NOT re-read files already processed.]');
+          const recovery = parts.join('\n');
+          pxLog('RECOVERY', `id:${id.slice(0,8)} inline fallback — hooks did not handle compaction`);
+          pushMessage(id, { type: 'system-msg', text: 'Sending recovery prompt (hook fallback)...' });
+          const line = JSON.stringify({ type: 'user', message: { role: 'user', content: recovery } }) + '\n';
+          s.child.write(line).catch(e => pxLog('WARN', `recovery write failed: ${e}`));
+          setStatus(id, 'working');  // recovery prompt triggers a new turn
+        } else {
+          setStatus(id, 'idle');
+        }
         if (getActiveSessionId() !== id) {
           s.unread = true;
           updateSessionCard(id);
@@ -386,8 +517,10 @@ export function handleEvent(id, event) {
 
     case 'system':
       if (event.subtype === 'init') {
-        pxLog('READY', `id:${id.slice(0,8)} model:${event.model || 'unknown'}`);
-        pushMessage(id, { type: 'system-msg', text: `Ready \u00b7 ${event.model || 'claude'}` });
+        s.model = event.model || 'unknown';
+        s._contextWindow = getContextWindow(s.model);
+        pxLog('READY', `id:${id.slice(0,8)} model:${s.model} ctx:${s._contextWindow}`);
+        pushMessage(id, { type: 'system-msg', text: `Ready \u00b7 ${s.model}` });
         // After ESC restart, always go idle regardless of status.
         // Otherwise: don't clobber 'working' if user queued a message before init.
         if (s._restarting || s.status !== 'working') setStatus(id, 'idle');
@@ -419,6 +552,20 @@ export function handleEvent(id, event) {
             }
           })();
         }
+      }
+      // Hook lifecycle events (from --include-hook-events)
+      if (event.subtype === 'hook_started' && event.hook_event === 'PreCompact') {
+        pxLog('COMPACT', `id:${id.slice(0,8)} PreCompact — context compressing`);
+        pushMessage(id, { type: 'system-msg', text: 'Context compacting\u2026' });
+        updateSessionCard(id);
+      }
+      if (event.subtype === 'hook_response' && event.hook_event === 'PostCompact') {
+        pxLog('COMPACT', `id:${id.slice(0,8)} PostCompact — recovery injected by hook`);
+        pushMessage(id, { type: 'system-msg', text: 'Context recovered. Resuming.' });
+        s._compactionWarned = false;
+        s._compactionDetected = false;  // hook handled it — no inline fallback needed
+        s._contextBaseline = null;  // re-baseline on next assistant event
+        updateSessionCard(id);
       }
       break;
 

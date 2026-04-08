@@ -25,7 +25,8 @@ const { invoke } = window.__TAURI__.core;
 let _ipcDir = null;
 async function getIpcDir() {
   if (_ipcDir) return _ipcDir;
-  const home = await window.__TAURI__.path.homeDir();
+  let home = await window.__TAURI__.path.homeDir();
+  if (!home.endsWith('/')) home += '/';
   _ipcDir = `${home}.local/share/pixel-terminal/`;
   return _ipcDir;
 }
@@ -106,7 +107,8 @@ async function loadBuddy() {
     const home = await getHomeDir();
     const raw = await invoke('read_file_as_text', { path: `${home}/.config/pixel-terminal/buddy.json` });
     buddy = JSON.parse(raw);
-  } catch {
+  } catch (e) {
+    console.warn('[companion] buddy load failed:', e?.message ?? e);
     buddy = {
       species: 'dragon',
       name: 'Buddy',
@@ -304,7 +306,7 @@ async function writeApproval(approved) {
       // Hook gate response (pixel_gate.py is polling this)
       const payload = JSON.stringify({ id: _hookGateReqId, approved });
       await invoke('write_file_as_text', { path: await ipcPath('pixel_hook_gate_response.json'), content: payload });
-      await invoke('write_file_as_text', { path: await ipcPath('pixel_hook_gate.json'), content: '{}' }).catch(() => {});
+      await invoke('write_file_as_text', { path: await ipcPath('pixel_hook_gate.json'), content: '{}' }).catch(e => console.warn('[companion] hook gate reset failed:', e));
       _hookGatePending = false;
       _hookGateReqId   = null;
     } else {
@@ -332,12 +334,13 @@ async function pollHookGate() {
   try {
     raw = await invoke('read_file_as_text', { path: await ipcPath('pixel_hook_gate.json') });
   } catch {
-    return;
+    return;  // file missing = no gate pending
   }
   let gate;
   try {
     gate = JSON.parse(raw);
-  } catch {
+  } catch (e) {
+    console.warn('[companion] hook gate parse failed:', e?.message ?? e);
     return;
   }
   if (!gate?.id || !gate?.msg) return;
@@ -367,7 +370,8 @@ async function pollLintFile() {
   let lint;
   try {
     lint = JSON.parse(raw);
-  } catch {
+  } catch (e) {
+    console.warn('[companion] lint parse failed — partial write?', e?.message ?? e);
     setTimeout(pollLintFile, 50);  // partial write in flight — retry once after 50ms
     return;
   }
