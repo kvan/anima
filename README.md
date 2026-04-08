@@ -80,11 +80,23 @@ Commentary runs as short background prompts via the Claude CLI, capped at 2 conc
 
 ## Getting Started
 
-1. Download `Anima.dmg` from [Releases](https://github.com/btangonan/anima/releases)
-2. Open the app
-3. Point it at a project directory and start a session
+1. Install [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code):
+   ```bash
+   npm install -g @anthropic-ai/claude-code
+   ```
+2. Authenticate:
+   ```bash
+   claude login
+   ```
+3. Download `Anima.dmg` from [Releases](https://github.com/btangonan/anima/releases)
+4. Open the app
+5. Point it at a project directory and start a session
 
 The companion generates on first session. @nim@ accrues automatically.
+
+### Troubleshooting
+
+**No sessions starting or blank companion?** Anima requires an authenticated Claude Code CLI. Run `claude login` in your terminal and reopen the app.
 
 ### Build from source
 
