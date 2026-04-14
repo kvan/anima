@@ -292,6 +292,10 @@ canvas.sprite-canvas {
   margin: 0;
 }
 
+/* Matches START HERE walker: 8px/320ms = 25px/s constant velocity.
+   ±10px range at 25px/s → 0.4s per side → 1.6s full cycle.
+   linear (no ease) mirrors the walker's constant-speed bounce.
+   No scaleX flip — Oracle may have hats/addons that look wrong mirrored. */
 @keyframes oracle-sway {
   0%   { transform: translateX(0); }
   25%  { transform: translateX(-10px); }
@@ -299,7 +303,7 @@ canvas.sprite-canvas {
   100% { transform: translateX(0); }
 }
 .fc-sprite.thinking {
-  animation: oracle-sway 0.8s ease-in-out infinite;
+  animation: oracle-sway 1.6s linear infinite;
   will-change: transform;
 }
 
