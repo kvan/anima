@@ -258,6 +258,9 @@ function initOraclePreChat() {
     _pendingReqId = reqId;
     _pendingMsg = text;
 
+    document.body.dataset.oracleThinking = '1';
+    document.dispatchEvent(new CustomEvent('oracle:thinking'));
+
     try {
       const resp = await invoke('oracle_query', {
         message: text,
@@ -288,6 +291,9 @@ function initOraclePreChat() {
       if (_thinkingEl) { _thinkingEl.remove(); _thinkingEl = null; }
       _pendingReqId = null;
       appendEntry('(oracle unreachable)', 'oracle-thinking');
+    } finally {
+      delete document.body.dataset.oracleThinking;
+      document.dispatchEvent(new CustomEvent('oracle:idle'));
     }
   }
 

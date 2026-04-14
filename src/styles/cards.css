@@ -292,6 +292,17 @@ canvas.sprite-canvas {
   margin: 0;
 }
 
+@keyframes oracle-sway {
+  0%   { transform: translateX(0); }
+  25%  { transform: translateX(-10px); }
+  75%  { transform: translateX(10px); }
+  100% { transform: translateX(0); }
+}
+.fc-sprite.thinking {
+  animation: oracle-sway 0.8s ease-in-out infinite;
+  will-change: transform;
+}
+
 .fc-left-meta {
   font-size: var(--fs-xs);
   color: var(--text-dim);
