@@ -152,12 +152,23 @@ let _asciiSpecies     = 'duck';
 let _asciiEye         = DEFAULT_EYE;
 let _asciiHat         = 'none';
 
+// Oracle thinking — same frame-cycle as session card working familiars (400ms, frames 0→1→2)
+let _oracleThinkTimer = null;
+
 function _startOracleThink() {
-  _asciiPre?.classList.add('oracle-thinking');
+  if (_oracleThinkTimer) return;
+  let frame = 0;
+  _oracleThinkTimer = setInterval(() => {
+    frame = (frame + 1) % 3;
+    updateAsciiFrame(frame);
+  }, 400);
 }
 
 function _stopOracleThink() {
-  _asciiPre?.classList.remove('oracle-thinking');
+  if (!_oracleThinkTimer) return;
+  clearInterval(_oracleThinkTimer);
+  _oracleThinkTimer = null;
+  updateAsciiFrame(0);
 }
 
 function getEyeChar(buddy) {
