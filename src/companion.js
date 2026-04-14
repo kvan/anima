@@ -662,12 +662,21 @@ export async function saveCommentaryFrequency(level) {
   }
 }
 
-// Reloads buddy from disk and updates the live module-level reference.
-// Call after any operation that rewrites buddy.json (e.g. reroll_oracle).
-// Returns the fresh buddy object. Because `buddy` is a live ES module binding,
-// all importers of `companionBuddy` and closures over `buddy` see the new value.
+// Reloads buddy from disk, updates the live module-level reference, and
+// re-renders the sidebar panel so the ASCII sprite, name, and type all reflect
+// the new identity immediately. Call after any operation that rewrites buddy.json.
 export async function reloadBuddy() {
   await loadBuddy();
+  // Refresh sidebar bio text (name · rarity species)
+  const bio = document.getElementById('vexil-bio');
+  if (bio && buddy) {
+    const displaySpecies = buddy.species ?? 'duck';
+    const rarityStr = buddy.rarity ? `${buddy.rarity} ` : '';
+    const nameEl = bio.querySelector('.vexil-bio-name');
+    if (nameEl) nameEl.textContent = `${buddy.name} · ${rarityStr}${displaySpecies}`.trim();
+  }
+  // Re-render ASCII sprite + reset animation for new species
+  renderCompanionSprite();
   return buddy;
 }
 
