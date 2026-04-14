@@ -64,6 +64,7 @@
   color: var(--companion-hue, #d87756);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  text-align: center;
 }
 .vexil-bio-type {
   font-family: var(--font);
