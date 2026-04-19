@@ -24,6 +24,7 @@ import {
 } from './slash-menu.js';
 import { setHistoryDeps, initHistory, scanHistory, exitHistoryView, isHistoryActive, showHistoryFind } from './history.js';
 import { initCompanion } from './companion.js';
+import { initSettingsUI } from './settings-ui.js';
 
 
 
@@ -81,6 +82,9 @@ window.addEventListener('DOMContentLoaded', async () => {
       window.__ANIMA_PERMISSION_MODE__ = cfg.permissionMode;
     }
   } catch { /* no settings file yet — bypass remains the default */ }
+
+  // P2.H — wire Settings UI (reflects hydrated mode, writes back on user click)
+  initSettingsUI();
 
   // Sync buddy.json from ~/.claude.json before companion loads so the companion
   // reads up-to-date species/rarity/stats on first render (replaces bun sync_real_buddy.ts)

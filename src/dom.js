@@ -40,6 +40,9 @@ export function initDOM() {
   $.btnClearVoiceLog = document.getElementById('btn-clear-voice-log');
   $.voiceSourceBle = document.getElementById('voice-source-ble');
   $.voiceSourceMic = document.getElementById('voice-source-mic');
+  $.permModeBypass = document.getElementById('perm-mode-bypass');
+  $.permModeDefault = document.getElementById('perm-mode-default');
+  $.permModeGated = document.getElementById('perm-mode-gated');
   $.sessionPrompt = document.getElementById('session-prompt');
   $.sessionPromptGotIt = document.getElementById('session-prompt-got-it');
   $.sessionPromptWalker = document.getElementById('session-prompt-walker');
