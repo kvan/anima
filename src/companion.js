@@ -15,6 +15,7 @@
 import { SPRITE_DATA, getActiveSessionId } from './session.js';
 import { SPRITES, EYE_CHARS, DEFAULT_EYE, HATS, renderFrame } from './ascii-sprites.js';
 import { showOracleCard } from './cards.js';
+import { showPermissionModal, hidePermissionModal } from './permission-modal.js';
 
 const { invoke } = window.__TAURI__.core;
 
@@ -89,6 +90,9 @@ let _lastOpsKey   = '';       // prevent re-showing same ops report
 let _approvalPending = false;
 let _hookGatePending = false;
 let _hookGateReqId   = null;
+let _animaGatePending    = false;
+let _animaGateReqId      = null;
+let _animaGateSessionId  = null;
 let _pollActive = false;
 let _masterOutOffset = 0;  // line count consumed from vexil_master_out.jsonl
 
@@ -153,22 +157,39 @@ let _asciiEye         = DEFAULT_EYE;
 let _asciiHat         = 'none';
 
 // Oracle thinking — same frame-cycle as session card working familiars (400ms, frames 0→1→2)
-let _oracleThinkTimer = null;
+let _oracleThinkTimer       = null;
+let _oracleThinkPendingStop = false;
 
 function _startOracleThink() {
-  if (_oracleThinkTimer) return;
+  if (_oracleThinkTimer) {
+    // Thinking restarted before the pending-stop fired — cancel the pending stop.
+    _oracleThinkPendingStop = false;
+    return;
+  }
+  // Suppress blink and fidget for the duration of the thinking animation.
+  clearTimeout(_asciiBlinkTimer);
+  clearTimeout(_asciiAnimTimer);
+  _asciiBlinking = false;
+  _oracleThinkPendingStop = false;
   let frame = 0;
   _oracleThinkTimer = setInterval(() => {
     frame = (frame + 1) % 3;
     updateAsciiFrame(frame);
+    // Stop only when the cycle naturally returns to frame 0 (resting pose).
+    if (frame === 0 && _oracleThinkPendingStop) {
+      clearInterval(_oracleThinkTimer);
+      _oracleThinkTimer       = null;
+      _oracleThinkPendingStop = false;
+      // Resume blink-only idle — oracle never fidgets.
+      scheduleNextBlink();
+    }
   }, 400);
 }
 
 function _stopOracleThink() {
   if (!_oracleThinkTimer) return;
-  clearInterval(_oracleThinkTimer);
-  _oracleThinkTimer = null;
-  updateAsciiFrame(0);
+  // Signal the interval to stop at the next natural frame-0 wrap.
+  _oracleThinkPendingStop = true;
 }
 
 function getEyeChar(buddy) {
@@ -205,23 +226,22 @@ function scheduleNextFidget() {
   }, delay);
 }
 
-/** Independent eye blink cycle — fires every 3–6s, 150ms blink duration */
+/** Independent eye blink cycle — fires every 3–6s, 150ms blink duration.
+ *  Oracle is blink-only when idle: no fidget, no sway. Thinking suppresses blink. */
 function scheduleNextBlink() {
   clearTimeout(_asciiBlinkTimer);
   if (!_asciiPre) return;
   const delay = 3000 + Math.random() * 3000;
   _asciiBlinkTimer = setTimeout(() => {
     if (!_asciiPre) return;
-    // Don't blink during action frames — looks odd mid-action
-    if (_asciiState === 'action') { scheduleNextBlink(); return; }
+    // Safety guard: don't blink while oracle is thinking or mid-action.
+    if (_oracleThinkTimer || _asciiState === 'action') { scheduleNextBlink(); return; }
     _asciiBlinking = true;
-    // Re-render current frame with closed eyes
-    const frameIdx = _asciiState === 'fidget' ? 1 : 0;
-    updateAsciiFrame(frameIdx);
+    updateAsciiFrame(0);  // Oracle always rests at frame 0 during idle.
     // Open eyes after 150ms
     setTimeout(() => {
       _asciiBlinking = false;
-      if (_asciiPre) updateAsciiFrame(_asciiState === 'fidget' ? 1 : 0);
+      if (_asciiPre) updateAsciiFrame(0);
       scheduleNextBlink();
     }, 150);
   }, delay);
@@ -239,7 +259,7 @@ export function triggerAsciiAction() {
   _asciiActionTimer = setTimeout(() => {
     _asciiState = 'idle';
     updateAsciiFrame(0);
-    scheduleNextFidget();
+    scheduleNextBlink();  // Oracle is blink-only — no fidget after action.
   }, 600);
 }
 
@@ -298,9 +318,8 @@ function renderCompanionSprite() {
   });
   panel.appendChild(viewBtn);
 
-  // Render initial idle frame and start animation
+  // Render initial idle frame — oracle is blink-only, no fidget.
   updateAsciiFrame(0);
-  scheduleNextFidget();
   scheduleNextBlink();
 }
 
@@ -341,6 +360,87 @@ async function writeApproval(approved) {
     return;
   }
   hideApprovalDialog();
+}
+
+// ── Anima permission-gate poller ──────────────────────────────────────────────
+// Polls ~/.local/share/pixel-terminal/anima_gate_<session_id>.json written by
+// the per-session MCP gate (anima_gate.py today; Rust sidecar after P2.C).
+// The session_id in the filename matches the active session; the gate
+// process itself was spawned by session-lifecycle.js with ANIMA_SESSION set.
+
+async function pollAnimaGate() {
+  if (_animaGatePending) return;
+
+  const sid = getActiveSessionId?.();
+  if (!sid) return;  // no active session — nothing to gate
+
+  let raw;
+  try {
+    raw = await invoke('read_file_as_text', { path: await ipcPath(`anima_gate_${sid}.json`) });
+  } catch {
+    return;  // file missing = no gate pending
+  }
+  if (!raw || raw === '{}') return;
+
+  let gate;
+  try {
+    gate = JSON.parse(raw);
+  } catch (e) {
+    console.warn('[companion] anima gate parse failed:', e?.message ?? e);
+    return;
+  }
+  if (!gate?.id || !gate?.tool) return;
+  if (gate.expires && Date.now() / 1000 > gate.expires) return;
+
+  _animaGatePending   = true;
+  _animaGateReqId     = gate.id;
+  _animaGateSessionId = sid;
+  invoke('js_log', { msg: `[anima-gate] ${gate.tool} · id:${gate.id}` }).catch(() => {});
+
+  showPermissionModal(
+    { tool: gate.tool, input: gate.input ?? {} },
+    (action) => writeAnimaGateResponse(action)
+  );
+}
+
+async function writeAnimaGateResponse(action) {
+  const sid   = _animaGateSessionId;
+  const reqId = _animaGateReqId;
+  if (!sid || !reqId) {
+    hidePermissionModal();
+    _animaGatePending = false;
+    return;
+  }
+  const approved = (action === 'allow_once' || action === 'allow_always');
+  const payload = { id: reqId, approved, action };
+  try {
+    await invoke('write_file_as_text', {
+      path: await ipcPath(`anima_gate_${sid}_response.json`),
+      content: JSON.stringify(payload),
+    });
+    invoke('js_log', { msg: `[anima-gate] response action=${action} approved=${approved}` }).catch(() => {});
+
+    // P2.E will persist allow_always to permissions.json.
+    // P2.G will consume deny_pause to pause the session supervisor.
+    // For now we log intent so the signal is observable in /tmp/pixel-terminal.log.
+    if (action === 'allow_always') {
+      invoke('js_log', { msg: `[anima-gate] allow_always — persistence layer pending (P2.E)` }).catch(() => {});
+    } else if (action === 'deny_pause') {
+      invoke('js_log', { msg: `[anima-gate] deny_pause — supervisor pause pending (P2.G)` }).catch(() => {});
+      document.dispatchEvent(new CustomEvent('anima:pause-session', { detail: { sessionId: sid } }));
+    }
+  } catch (e) {
+    console.error('[companion] failed to write anima gate response:', e);
+    // Leave pending flag set so the user can retry by clicking again — modal is hidden
+    // but the gate file is still in place. Next poll tick will re-show.
+    _animaGatePending   = false;
+    _animaGateReqId     = null;
+    _animaGateSessionId = null;
+    return;
+  }
+  _animaGatePending   = false;
+  _animaGateReqId     = null;
+  _animaGateSessionId = null;
 }
 
 // ── Hook gate poller ──────────────────────────────────────────────────────────
@@ -651,8 +751,10 @@ export async function initCompanion() {
     _masterOutOffset = raw.split('\n').filter(Boolean).length;
   } catch { /* file doesn't exist yet — fine */ }
 
-  // Start polling — hook gate checked first (higher urgency: a hook is blocking)
+  // Start polling — Anima permission gate first (blocks a tool call),
+  // then legacy hook gate, then lint file.
   setInterval(async () => {
+    await pollAnimaGate();
     await pollHookGate();
     await pollLintFile();
   }, POLL_INTERVAL);
