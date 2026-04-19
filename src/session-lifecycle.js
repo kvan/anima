@@ -133,14 +133,12 @@ async function spawnClaude(id) {
     ];
 
     if (permissionMode === 'gated') {
-      let home = await window.__TAURI__.path.homeDir();
-      if (!home.endsWith('/')) home += '/';
-      const gatePath = `${home}Projects/pixel-terminal/src-tauri/mcp/anima_gate.py`;
       try {
+        const bin = await invoke('resolve_gate_binary');
         const info = await invoke('write_mcp_config', {
           sessionId: id,
-          gateCommand: 'python3',
-          gateArgs: [gatePath],
+          gateCommand: bin.command,
+          gateArgs: bin.args,
         });
         claudeArgs.push(
           '--permission-mode', 'default',
@@ -148,9 +146,9 @@ async function spawnClaude(id) {
           '--mcp-config', info.path,
           '--permission-prompt-tool', info.toolFlag,
         );
-        pxLog('P2A', `gated id:${id.slice(0,8)} flag=${info.toolFlag}`);
+        pxLog('P2A', `gated id:${id.slice(0,8)} flag=${info.toolFlag} engine=${bin.engine}`);
       } catch (err) {
-        pxLog('P2A', `write_mcp_config failed — falling back to bypass: ${err}`);
+        pxLog('P2A', `gate setup failed — falling back to bypass: ${err}`);
         claudeArgs.push('--permission-mode', 'bypassPermissions');
       }
     } else {

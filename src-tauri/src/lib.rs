@@ -7,12 +7,13 @@ mod ws_bridge;
 use ws_bridge::{get_voice_status, ptt_release, ptt_start, set_omi_listening, set_voice_mode, switch_voice_source, sync_omi_sessions};
 
 pub mod commands;
+pub mod mcp_gate;
 use commands::file_io::{append_line_to_file, get_file_size, get_file_size_any, read_file_as_base64, read_file_as_text, write_file_as_text};
 use commands::history::{load_session_history, scan_session_history};
 use commands::companion::{sync_buddy, reroll_oracle};
 use commands::daemon::{start_daemon, DaemonShared};
 use commands::oracle::oracle_query;
-use commands::mcp_config_writer::write_mcp_config;
+use commands::mcp_config_writer::{resolve_gate_binary, write_mcp_config};
 use commands::misc::{js_log, read_slash_command_content, read_slash_commands};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -99,7 +100,8 @@ pub fn run() {
             sync_buddy,
             reroll_oracle,
             oracle_query,
-            write_mcp_config
+            write_mcp_config,
+            resolve_gate_binary
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

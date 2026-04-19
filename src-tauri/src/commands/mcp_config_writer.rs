@@ -22,6 +22,53 @@ pub struct McpConfigInfo {
     pub tool_flag: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GateBinaryInfo {
+    pub command: String,
+    pub args: Vec<String>,
+    pub engine: String, // "rust" | "python"
+}
+
+/// Resolve the gate spawn spec: prefer the Rust sidecar binary if built,
+/// fall back to the Python reference script. JS calls this and then passes
+/// the returned {command, args} into write_mcp_config.
+///
+/// Candidates checked in order — first existing wins:
+///   1. $HOME/Projects/pixel-terminal/src-tauri/target/release/anima_gate
+///   2. $HOME/Projects/pixel-terminal/src-tauri/target/debug/anima_gate
+///   3. python3 + $HOME/Projects/pixel-terminal/src-tauri/mcp/anima_gate.py
+#[tauri::command]
+pub fn resolve_gate_binary() -> Result<GateBinaryInfo, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME env not set".to_string())?;
+
+    let rust_candidates = [
+        PathBuf::from(&home).join("Projects/pixel-terminal/src-tauri/target/release/anima_gate"),
+        PathBuf::from(&home).join("Projects/pixel-terminal/src-tauri/target/debug/anima_gate"),
+    ];
+    for cand in &rust_candidates {
+        if cand.exists() {
+            return Ok(GateBinaryInfo {
+                command: cand.to_string_lossy().to_string(),
+                args: vec![],
+                engine: "rust".to_string(),
+            });
+        }
+    }
+
+    let py_script = PathBuf::from(&home)
+        .join("Projects/pixel-terminal/src-tauri/mcp/anima_gate.py");
+    if py_script.exists() {
+        return Ok(GateBinaryInfo {
+            command: "python3".to_string(),
+            args: vec![py_script.to_string_lossy().to_string()],
+            engine: "python".to_string(),
+        });
+    }
+
+    Err("no permission gate binary found (checked target/release, target/debug, mcp/anima_gate.py)".to_string())
+}
+
 pub fn derive_names(session_id: &str) -> Result<(String, String, String), String> {
     let hex_only: String = session_id.chars().filter(|c| c.is_ascii_hexdigit()).collect();
     if hex_only.len() < 8 {
